@@ -107,3 +107,21 @@ nohup python main_scratch.py \
 --gpu_ids 0 &
 
 ````
+
+<!-- ### Citation
+
+If you find this code is useful to your research, please cite:
+````
+@inproceedings{
+anonymous2020drawing,
+title={Drawing Early-Bird Tickets: Toward More Efficient Training of Deep Networks},
+author={Anonymous},
+booktitle={Submitted to International Conference on Learning Representations},
+year={2020},
+url={https://openreview.net/forum?id=BJxsrgStvr},
+note={under review}
+}
+```` -->
+
+### Acknowledgement
+Code is inspired by [Rethink-Network-Pruning](https://github.com/Eric-mingjie/rethinking-network-pruning).
