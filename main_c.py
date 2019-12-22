@@ -16,10 +16,10 @@ from compute_flops import print_model_param_flops
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Slimming CIFAR training')
-parser.add_argument('--data', type=str, default=None,
-                    help='path to dataset')
 parser.add_argument('--dataset', type=str, default='cifar100',
                     help='training dataset (default: cifar100)')
+parser.add_argument('--data', type=str, default=None,
+                    help='path to dataset')
 parser.add_argument('--sparsity-regularization', '-sr', dest='sr', action='store_true',
                     help='train with channel sparsity regularization')
 parser.add_argument('--s', type=float, default=0.0001,
@@ -30,7 +30,7 @@ parser.add_argument('--test-batch-size', type=int, default=256, metavar='N',
                     help='input batch size for testing (default: 256)')
 parser.add_argument('--epochs', type=int, default=160, metavar='N',
                     help='number of epochs to train (default: 160)')
-parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
+parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--schedule', type=int, nargs='+', default=[80, 120],
                         help='Decrease learning rate at these epochs.')
@@ -50,14 +50,12 @@ parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--save', default='./logs', type=str, metavar='PATH',
                     help='path to save prune model (default: current directory)')
-parser.add_argument('--arch', default='vgg', type=str, 
+parser.add_argument('--arch', default='vgg', type=str,
                     help='architecture to use')
 parser.add_argument('--scratch',default='', type=str,
                     help='the PATH to the pruned model')
 parser.add_argument('--depth', default=19, type=int,
                     help='depth of the neural network')
-# multi-gpus
-parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -69,17 +67,7 @@ if args.cuda:
 if not os.path.exists(args.save):
     os.makedirs(args.save)
 
-gpu = args.gpu_ids
-gpu_ids = args.gpu_ids.split(',')
-args.gpu_ids = []
-for gpu_id in gpu_ids:
-   id = int(gpu_id)
-   if id > 0:
-       args.gpu_ids.append(id)
-if len(args.gpu_ids) > 0:
-   torch.cuda.set_device(args.gpu_ids[0])
-
-kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+kwargs = {'num_workers': 8, 'pin_memory': True} if args.cuda else {}
 if args.dataset == 'cifar10':
     train_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10('./data.cifar10', train=True, download=True,
@@ -97,7 +85,7 @@ if args.dataset == 'cifar10':
                            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
                        ])),
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
-elif args.dataset == 'cifar10':
+elif args.dataset == 'cifar100':
     train_loader = torch.utils.data.DataLoader(
         datasets.CIFAR100('./data.cifar100', train=True, download=True,
                        transform=transforms.Compose([
@@ -114,7 +102,7 @@ elif args.dataset == 'cifar10':
                            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
                        ])),
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
-elif args.dataset == 'imagenet':
+else:
     # Data loading code
     traindir = os.path.join(args.data, 'train')
     valdir = os.path.join(args.data, 'val')
@@ -141,41 +129,39 @@ elif args.dataset == 'imagenet':
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=args.batch_size, shuffle=False,
+        batch_size=args.test_batch_size, shuffle=False,
         num_workers=16, pin_memory=True)
 
-model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth)
-
-if args.dataset == 'imagenet' or args.arch == 'resnet':
-    model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
-
-def load_checkpoint(model, checkpoint_path):
-   model_ckpt = torch.load(checkpoint_path, map_location='cpu')
-   pretrained_dict = model_ckpt['state_dict']
-   model_dict = model.state_dict()
-   new_dict = {}
-   for k in model_dict.keys():
-       pre_k = 'module.' + k
-       new_dict[k] = pretrained_dict[pre_k]
-   print('Total : {}, update: {}'.format(len(pretrained_dict), len(new_dict)))
-   model.load_state_dict(new_dict)
-   print('load checkpoint!')
-   return model
+if args.dataset == 'imagenet':
+    model = models.__dict__[args.arch](pretrained=False)
+    # model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
+else:
+    model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth)
 
 if args.scratch:
-    try:
-        checkpoint = torch.load(args.scratch)
-        print(checkpoint['state_dict'].keys())
+    checkpoint = torch.load(args.scratch)
+    if args.dataset == 'imagenet':
+        model = models.__dict__[args.arch](pretrained=False, cfg=checkpoint['cfg'])
+        model_ref = models.__dict__[args.arch](pretrained=False, cfg=checkpoint['cfg'])
+        model_ref.load_state_dict(checkpoint['state_dict'])
+    else:
         model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth, cfg=checkpoint['cfg'])
-        print(model)
-        if args.dataset == 'imagenet' or args.arch == 'resnet':
-            model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
-        model.load_state_dict(checkpoint['state_dict'])
-    except:
-        checkpoint = torch.load(args.scratch, map_location='cpu')
-        model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth, cfg=checkpoint['cfg'])
-        model = load_checkpoint(model, args.scratch)
-        # model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
+        model_ref = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth, cfg=checkpoint['cfg'])
+        model_ref.load_state_dict(checkpoint['state_dict'])
+    for m0, m1 in zip(model.modules(), model_ref.modules()):
+        if isinstance(m0, models.channel_selection):
+            m0.indexes.data = m1.indexes.data.clone()
+
+    if args.dataset == 'imagenet':
+        model_base = model
+        base_flops = print_model_param_flops(model_base, 224)
+        pruned_flops = print_model_param_flops(model, 224)
+    else:
+        pass
+        # model_base = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth)
+        # base_flops = print_model_param_flops(model_base, 32)
+        # pruned_flops = print_model_param_flops(model, 32)
+        # args.epochs = int(160 * (base_flops / pruned_flops))
 
 if args.cuda:
     model.cuda()
@@ -186,7 +172,7 @@ if args.resume:
     if os.path.isfile(args.resume):
         print("=> loading checkpoint '{}'".format(args.resume))
         checkpoint = torch.load(args.resume)
-        args.start_epoch = checkpoint['epoch']
+        # args.start_epoch = checkpoint['epoch']
         best_prec1 = checkpoint['best_prec1']
         model.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])

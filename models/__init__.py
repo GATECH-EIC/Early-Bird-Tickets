@@ -11,3 +11,5 @@ from .preresnet_lp import resnet_lp
 from .vgg_lp import vgg_lp
 from .resnet50 import resnet50_official
 from .vgg_11 import slimmingvgg
+from .hand_resnet50 import resnet50_prune
+from .resnet_imagenet import *

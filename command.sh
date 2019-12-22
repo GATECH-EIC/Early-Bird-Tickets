@@ -58,3 +58,98 @@ nohup python main_scratch.py \
 --sparsity-regularization \
 --scratch ./baseline/vgg16-cifar100/pruned_1035_0.1/pruned.pth.tar \
 --gpu_ids 0 &
+
+######## ImageNet resnet18
+# search
+CUDA_VISIBLE_DEVICES=3 python main.py \
+--dataset imagenet \
+--data /data1/ILSVRC2017/ILSVRC/Data/CLS-LOC \
+--arch resnet18 \
+--depth 18 \
+--lr 0.1 \
+--epochs 90 \
+--schedule 30 60 \
+--batch-size 256 \
+--test-batch-size 64 \
+--momentum 0.9 \
+--sparsity-regularization \
+--filter none \
+--sigma 0 \
+--sparsity_gt 0
+
+# prune
+CUDA_VISIBLE_DEVICES=5 python resprune.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet18 \
+--test-batch-size 128 \
+--depth 18 \
+--percent 0.3 \
+--model ./resnet18-imagenet/resnet18_0/EB-30-11.pth.tar \
+--save ./resnet18-imagenet/resnet18_0/pruned_3011_0.3 \
+
+# retrain
+CUDA_VISIBLE_DEVICES=3 python main_c.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet18 \
+--depth 18 \
+--lr 0.1 \
+--epochs 90 \
+--schedule 30 60 \
+--batch-size 128 \
+--test-batch-size 64 \
+--save ./resnet18-imagenet/resnet18_0/retrain_1011_0.1 \
+--momentum 0.9 \
+--sparsity-regularization \
+--scratch ./resnet18-imagenet/resnet18_0/pruned_1011_0.1/pruned.pth.tar \
+--start-epoch 11
+
+######## ImageNet resnet50
+# search
+python -m torch.distributed.launch main_resnet50.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet50_official \
+--depth 50 \
+--lr 0.1 \
+--epochs 90 \
+--schedule 30 60 \
+--batch-size 256 \
+--test-batch-size 64 \
+--save ./resnet50-imagenet/resnet50_0/temp \
+--momentum 0.9 \
+--sparsity-regularization \
+--filter none \
+--sigma 0 \
+--sparsity_gt 0 \
+--gpu_ids 0,1,2,3
+
+# prune
+python resprune_50.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet50_official \
+--test-batch-size 128 \
+--depth 50 \
+--percent 0.7 \
+--model ./resnet50-imagenet/resnet50_0/EB-70-8.pth.tar \
+--save ./resnet50-imagenet/resnet50_0/pruned_7008_0.7
+
+# retrain
+python -m torch.distributed.launch main_resnet50.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet50_prune \
+--depth 50 \
+--lr 0.1 \
+--epochs 90 \
+--schedule 30 60 \
+--batch-size 256 \
+--test-batch-size 128 \
+--save ./resnet50-imagenet/resnet50_0/retrain_7008_0.7 \
+--scratch ./resnet50-imagenet/resnet50_0/pruned_7008_0.7/pruned.pth.tar \
+--momentum 0.9 \
+--gpu_ids 4,5,6,7 \
+--port 14000
+

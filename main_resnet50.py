@@ -66,8 +66,13 @@ parser.add_argument('--sparsity_gt', default=0, type=float, help='sparsity contr
 # multi-gpus
 parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
-# parser.add_argument("--local_rank", type=int, default=0)
-# parser.add_argument("--port", type=str, default="15000")
+parser.add_argument("--local_rank", type=int, default=0)
+parser.add_argument("--port", type=str, default="15000")
+
+# swa
+parser.add_argument('--swa', default=False, help='SWALP start epoch')
+parser.add_argument('--swa_start', type=int, default=60, metavar='N',
+                    help='SWALP start epoch')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -89,9 +94,8 @@ print(args.gpu_ids)
 if len(args.gpu_ids) > 0:
    torch.cuda.set_device(args.gpu_ids[0])
 
-# torch.distributed.init_process_group(backend="nccl")
-# torch.distributed.init_process_group(backend="gloo")
-# os.environ['MASTER_PORT'] = args.port
+os.environ['MASTER_PORT'] = args.port
+torch.distributed.init_process_group(backend="nccl")
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 if args.dataset == 'cifar10':
@@ -171,47 +175,58 @@ else:
         num_workers=16, pin_memory=True)
 
 
+
 if args.dataset == 'imagenet':
     model = models.__dict__[args.arch](pretrained=False)
+    if args.swa == True:
+        swa_n = 0
+        swa_model = models.__dict__[args.arch](pretrained=False)
     if args.scratch:
         checkpoint = torch.load(args.scratch)
         if args.dataset == 'imagenet':
             cfg_input = checkpoint['cfg']
             model = models.__dict__[args.arch](pretrained=False, cfg=cfg_input)
+            if args.swa == True:
+                swa_model = models.__dict__[args.arch](pretrained=False, cfg=cfg_input)
     if args.cuda:
         model.cuda()
+        if args.swa == True:
+            swa_model.cuda()
     if len(args.gpu_ids) > 1:
-        model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
-        # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.gpu_ids, find_unused_parameters=True)
+        # model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.gpu_ids)
+        if args.swa == True:
+            swa_model = torch.nn.parallel.DistributedDataParallel(swa_model, device_ids=args.gpu_ids)
 else:
     model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth)
     if args.cuda:
         model.cuda()
     if len(args.gpu_ids) > 1:
-        model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
-        # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.gpu_ids, find_unused_parameters=True)
+        # model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.gpu_ids)
 
 if args.dataset == 'imagenet':
-    pruned_flops = print_model_param_flops(model.cpu(), 224)
-    model.cuda()
-
+    pruned_flops = print_model_param_flops(model, 224)
 
 optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
-def save_checkpoint(state, is_best, epoch, filepath):
-    if epoch == 'init':
-        filepath = os.path.join(filepath, 'init.pth.tar')
-        torch.save(state, filepath)
-    elif 'EB' in str(epoch):
-        filepath = os.path.join(filepath, epoch+'.pth.tar')
-        torch.save(state, filepath)
+def save_checkpoint(state, is_best, epoch, filepath, is_swa):
+    if is_swa:
+        torch.save(state, os.path.join(filepath, 'swa.pth.tar'))
     else:
-        filename = os.path.join(filepath, 'ckpt'+str(epoch)+'.pth.tar')
-        torch.save(state, filename)
-        # filename = os.path.join(filepath, 'ckpt.pth.tar')
-        # torch.save(state, filename)
-        if is_best:
-            shutil.copyfile(filename, os.path.join(filepath, 'model_best.pth.tar'))
+        if epoch == 'init':
+            filepath = os.path.join(filepath, 'init.pth.tar')
+            torch.save(state, filepath)
+        elif 'EB' in str(epoch):
+            filepath = os.path.join(filepath, epoch+'.pth.tar')
+            torch.save(state, filepath)
+        else:
+            filename = os.path.join(filepath, 'ckpt'+str(epoch)+'.pth.tar')
+            torch.save(state, filename)
+            # filename = os.path.join(filepath, 'ckpt.pth.tar')
+            # torch.save(state, filename)
+            if is_best:
+                shutil.copyfile(filename, os.path.join(filepath, 'model_best.pth.tar'))
 
 if args.resume:
     if os.path.isfile(args.resume):
@@ -220,21 +235,24 @@ if args.resume:
         # args.start_epoch = checkpoint['epoch']
         best_prec1 = checkpoint['best_prec1']
         model.load_state_dict(checkpoint['state_dict'])
+        if args.swa == True:
+            swa_model.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         print("=> loaded checkpoint '{}' (epoch {}) Prec1: {:f}"
               .format(args.resume, checkpoint['epoch'], best_prec1))
     else:
         print("=> no checkpoint found at '{}'".format(args.resume))
 else:
-    save_checkpoint({'state_dict': model.state_dict()}, False, epoch='init', filepath=args.save)
+    save_checkpoint({'state_dict': model.state_dict()}, False, epoch='init', filepath=args.save, is_swa=False)
 
-history_score = np.zeros((args.epochs, 3))
+history_score = np.zeros((args.epochs, 4))
 
 # additional subgradient descent on the sparsity-induced penalty term
 def updateBN():
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):
-            m.weight.grad.data.add_(args.s*torch.sign(m.weight.data))  # L1
+            if m.weight.grad is not None:
+                m.weight.grad.data.add_(args.s*torch.sign(m.weight.data))  # L1
 
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
@@ -283,7 +301,7 @@ def train(epoch):
     history_score[epoch][0] = avg_loss / len(train_loader)
     history_score[epoch][1] = np.round(train_acc / len(train_loader), 2)
 
-def test():
+def test(model):
     model.eval()
     test_loss = 0
     test_acc = 0
@@ -389,7 +407,7 @@ for epoch in range(args.start_epoch, args.epochs):
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
             'optimizer': optimizer.state_dict(),
-            }, is_best, 'EB-30-'+str(epoch+1), filepath=args.save)
+            }, is_best, 'EB-30-'+str(epoch+1), filepath=args.save, is_swa=False)
             flag_30 = False
     if early_bird_50.early_bird_emerge(model):
         print("[early_bird_50] Find EB!!!!!!!!!, epoch: "+str(epoch))
@@ -399,7 +417,7 @@ for epoch in range(args.start_epoch, args.epochs):
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
             'optimizer': optimizer.state_dict(),
-            }, is_best, 'EB-50-'+str(epoch+1), filepath=args.save)
+            }, is_best, 'EB-50-'+str(epoch+1), filepath=args.save, is_swa=False)
             flag_50 = False
     if early_bird_70.early_bird_emerge(model):
         print("[early_bird_70] Find EB!!!!!!!!!, epoch: "+str(epoch))
@@ -409,13 +427,13 @@ for epoch in range(args.start_epoch, args.epochs):
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
             'optimizer': optimizer.state_dict(),
-            }, is_best, 'EB-70-'+str(epoch+1), filepath=args.save)
+            }, is_best, 'EB-70-'+str(epoch+1), filepath=args.save, is_swa=False)
             flag_70 = False
     if epoch in args.schedule:
         for param_group in optimizer.param_groups:
             param_group['lr'] *= 0.1
     train(epoch)
-    prec1 = test()
+    prec1 = test(model)
     history_score[epoch][2] = prec1
     np.savetxt(os.path.join(args.save, 'record.txt'), history_score, fmt = '%10.5f', delimiter=',')
     is_best = prec1 > best_prec1
@@ -425,8 +443,26 @@ for epoch in range(args.start_epoch, args.epochs):
         'state_dict': model.state_dict(),
         'best_prec1': best_prec1,
         'optimizer': optimizer.state_dict(),
-    }, is_best, epoch, filepath=args.save)
+    }, is_best, epoch, filepath=args.save, is_swa=False)
+
+    if args.swa ==True and epoch >= args.swa_start:
+        moving_average(swa_model, model, 1.0 / (swa_n + 1))
+        swa_n += 1
+        bn_update(train_loader, swa_model)
+        prec1 = test(swa_model)
+        history_score[epoch][3] = prec1
+        save_checkpoint({
+        'epoch': epoch + 1,
+        'state_dict': swa_model.state_dict(),
+        'prec1': prec1,
+        'optimizer': optimizer.state_dict(),
+        }, is_best, filepath=args.save, is_swa=True)
+    else:
+        history_score[epoch][3] = 0.0
 
 print("Best accuracy: "+str(best_prec1))
 history_score[-1][0] = best_prec1
+if args.swa ==True:
+    history_score[-1][1] = prec1
+    print('SWA accuracy: '+str(prec1))
 np.savetxt(os.path.join(args.save, 'record.txt'), history_score, fmt = '%10.5f', delimiter=',')
