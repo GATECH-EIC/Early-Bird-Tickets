@@ -8,7 +8,6 @@ This is PyTorch implementation of [Drawing Early-Bird Tickets: Toward More Effic
 ICLR 2020 spotlight oral paper
 
 ## Table of Content
-
 [TOC]
 
 ## Introduction
