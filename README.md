@@ -417,5 +417,5 @@ url={https://openreview.net/forum?id=BJxsrgStvr}
 
 ## Acknowledgement
 * Code is inspired by [Rethink-Network-Pruning](https://github.com/Eric-mingjie/rethinking-network-pruning).
-* Thanks for the constructive suggestions of [Yifan](https://github.com/yueruchen) and [Tianlong](https://github.com/TianlongChenTAMU) ...
-* Thanks for [Yifan](https://github.com/yueruchen) for helping accelerate ImageNet training.
+* Thank for the constructive suggestions of [Yifan](https://github.com/yueruchen) and [Tianlong](https://github.com/TianlongChenTAMU) ...
+* Thank [Yifan](https://github.com/yueruchen) for helping accelerate ImageNet training.
