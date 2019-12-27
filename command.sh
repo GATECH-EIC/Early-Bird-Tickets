@@ -27,7 +27,7 @@ python vggprune.py \
 --gpu_ids 0
 
 # retrain (finetune)
-nohup python main_c.py \
+python main_c.py \
 --dataset cifar100 \
 --arch vgg \
 --depth 16 \
@@ -41,10 +41,10 @@ nohup python main_c.py \
 --sparsity-regularization \
 --scratch ./baseline/vgg16-cifar100/pruned_1035_0.1/pruned.pth.tar \
 --gpu_ids 0 \
---start_epoch 35 &
+--start_epoch 35
 
 # retrain (re-init)
-nohup python main_scratch.py \
+python main_scratch.py \
 --dataset cifar100 \
 --arch vgg \
 --depth 16 \
@@ -57,11 +57,11 @@ nohup python main_scratch.py \
 --momentum 0.9 \
 --sparsity-regularization \
 --scratch ./baseline/vgg16-cifar100/pruned_1035_0.1/pruned.pth.tar \
---gpu_ids 0 &
+--gpu_ids 0
 
 ######## ImageNet resnet18
 # search
-CUDA_VISIBLE_DEVICES=3 python main.py \
+CUDA_VISIBLE_DEVICES=0 python main.py \
 --dataset imagenet \
 --data /data1/ILSVRC2017/ILSVRC/Data/CLS-LOC \
 --arch resnet18 \
@@ -72,10 +72,7 @@ CUDA_VISIBLE_DEVICES=3 python main.py \
 --batch-size 256 \
 --test-batch-size 64 \
 --momentum 0.9 \
---sparsity-regularization \
---filter none \
---sigma 0 \
---sparsity_gt 0
+--sparsity-regularization
 
 # prune
 CUDA_VISIBLE_DEVICES=5 python resprune.py \
