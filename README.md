@@ -301,4 +301,5 @@ url={https://openreview.net/forum?id=BJxsrgStvr}
 ````
 
 ## Acknowledgement
-Code is inspired by [Rethink-Network-Pruning](https://github.com/Eric-mingjie/rethinking-network-pruning).
+* Code is inspired by [Rethink-Network-Pruning](https://github.com/Eric-mingjie/rethinking-network-pruning).
+* Thank for the constructive suggestions of [Yifan](https://github.com/yueruchen) and [Tianlong](https://github.com/TianlongChenTAMU) ...
