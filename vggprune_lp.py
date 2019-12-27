@@ -8,8 +8,13 @@ from torch.autograd import Variable
 from torchvision import datasets, transforms
 from compute_flops import print_model_param_nums, print_model_param_flops
 
-from models import *
+import models
+from qtorch.quant import *
+from qtorch.optim import OptimLP
+from qtorch import BlockFloatingPoint, FixedPoint, FloatingPoint
+from qtorch.auto_low import sequential_lower
 
+num_types = ["weight", "activate", "grad", "error", "momentum"]
 
 # Prune settings
 parser = argparse.ArgumentParser(description='PyTorch Slimming CIFAR prune')
@@ -32,6 +37,14 @@ parser.add_argument('--save', default='', type=str, metavar='PATH',
 # multi-gpus
 parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
+# quantized parameters
+for num in num_types:
+    parser.add_argument('--wl-{}'.format(num), type=int, default=-1, metavar='N',
+                        help='word length in bits for {}; -1 if full precision.'.format(num))
+parser.add_argument('--rounding'.format(num), type=str, default='stochastic', metavar='S',
+                    choices=["stochastic","nearest"],
+                    help='rounding method for {}, stochastic or nearest'.format(num))
+
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -47,9 +60,28 @@ for gpu_id in gpu_ids:
 if len(args.gpu_ids) > 0:
    torch.cuda.set_device(args.gpu_ids[0])
 
+# prepare quantization functions
+# using block floating point, allocating shared exponent along the first dimension
+number_dict = dict()
+for num in num_types:
+    num_wl = getattr(args, "wl_{}".format(num))
+    number_dict[num] = BlockFloatingPoint(wl=num_wl, dim=0)
+    print("{:10}: {}".format(num, number_dict[num]))
+quant_dict = dict()
+for num in ["weight", "momentum", "grad"]:
+    quant_dict[num] = quantizer(forward_number=number_dict[num],
+                                forward_rounding=args.rounding)
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = resnet_lp(bits_A=8, bits_E=8, bits_W=8, dataset=args.dataset, depth=args.depth)
+model = models.__dict__['vgg'](dataset=args.dataset, depth=args.depth)
+# automatically insert quantization modules
+model = sequential_lower(model, layer_types=["conv", "linear"],
+                         forward_number=number_dict["activate"], backward_number=number_dict["error"],
+                         forward_rounding=args.rounding, backward_rounding=args.rounding)
+# removing the final quantization module
+model.classifier = model.classifier[0] 
+
 if args.model:
     if os.path.isfile(args.model):
         print("=> loading checkpoint '{}'".format(args.model))
@@ -191,7 +223,14 @@ acc = test(model)
 
 # Make real prune
 print(cfg)
-newmodel = resnet_lp(bits_A=32, bits_E=32, bits_W=32, dataset=args.dataset, depth=args.depth)
+newmodel = models.__dict__['vgg'](dataset=args.dataset, depth=args.depth, cfg=cfg)
+# automatically insert quantization modules
+newmodel = sequential_lower(newmodel, layer_types=["conv", "linear"],
+                         forward_number=number_dict["activate"], backward_number=number_dict["error"],
+                         forward_rounding=args.rounding, backward_rounding=args.rounding)
+# removing the final quantization module
+newmodel.classifier = newmodel.classifier[0] 
+
 if len(args.gpu_ids) > 0:
     newmodel = torch.nn.DataParallel(newmodel, device_ids=args.gpu_ids)
 if args.cuda:

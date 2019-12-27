@@ -25,6 +25,7 @@ ICLR 2020 spotlight oral paper
 <li><a href="#core-training-options">Core Training Options</a></li>
 <li><a href="#standard-train-for-identifying-early-bird-tickets">Standard Train for Identifying Early-Bird Tickets</a></li>
 <li><a href="#retrain-to-restore-accuracy">Retrain to Restore Accuracy</a></li>
+<li><a href="#low-precision-search-and-retrain">Low Precision Search and Retrain</a></li>
 </ul>
 </li>
 <li><a href="#imagenet-experiments">ImageNet Experiments</a><ul>
@@ -88,6 +89,8 @@ The code has the following dependencies:
 - torchvision 0.3.0
 - Pillow (PIL) 5.4.1
 - scipy 1.2.1
+- [qtorch](https://github.com/Tiiiger/QPyTorch) 0.1.1 (for low precision)
+- GCC >= 4.9 on linux (for low precision)
 
 ### Core Training Options
 - `dataset`: which dataset you want to use CIFAR10/100 by default
@@ -173,6 +176,79 @@ CUDA_VISIBLE_DEVICES=0 python main_scratch.py \
 --sparsity-regularization \
 --scratch ./baseline/vgg16-cifar100/pruned_1035_0.1/pruned.pth.tar \
 --gpu_ids 0
+````
+
+### Low Precision Search and Retrain
+We perform low precision method [SWALP](https://arxiv.org/pdf/1904.11943.pdf) to both the search and retrian stages, e.g., for VGG16 performed on CIFAR-10.
+
+* search stage:
+
+````
+CUDA_VISIBLE_DEVICES=0 python main_lp.py \
+    --dataset cifar10 \
+    --arch vgg \
+    --depth 16 \
+    --lr 0.1 \
+    --epochs 160 \
+    --schedule 80 120 \
+    --batch-size 256 \
+    --test-batch-size 256 \
+    --save ./lp_baseline/vgg16-cifar10 \
+    --momentum 0.9 \
+    --sparsity-regularization \
+    --swa True \
+    --swa_start 140 \
+    --wl-weight 8 \
+    --wl-grad 8 \
+    --wl-activate 8 \
+    --wl-error 8 \
+    --wl-momentum 8 \
+    --rounding stochastic
+````
+
+* real prune the saved checkpoints:
+
+````
+CUDA_VISIBLE_DEVICES=0 python vggprune_lp.py \
+    --dataset cifar10 \
+    --test-batch-size 256 \
+    --depth 16 \
+    --percent 0.3 \
+    --model ./lp_baseline/vgg16-cifar10/EB-30-32.pth.tar \
+    --save ./lp_baseline/vgg16-cifar10/pruned_3032_0.3 \
+    --wl-weight 8 \
+    --wl-grad 8 \
+    --wl-activate 8 \
+    --wl-error 8 \
+    --wl-momentum 8 \
+    --rounding stochastic
+````
+
+* retrain to restore accuracy:
+
+````
+CUDA_VISIBLE_DEVICES=0 python main_c_lp.py \
+--dataset cifar10 \
+--arch vgg \
+--depth 16 \
+--lr 0.1 \
+--epochs 160 \
+--schedule 80 120 \
+--batch-size 256 \
+--test-batch-size 128 \
+--scratch ./lp_baseline/vgg16-cifar10/pruned_3032_0.3/pruned.pth.tar \
+--save ./lp_baseline/vgg16-cifar10/lp_retrain_3032_0.3 \
+--start_epoch 32 \
+--momentum 0.9 \
+--sparsity-regularization \
+--swa True \
+--swa_start 140 \
+--wl-weight 8 \
+--wl-grad 8 \
+--wl-activate 8 \
+--wl-error 8 \
+--wl-momentum 8 \
+--rounding stochastic
 ````
 
 * comparison example

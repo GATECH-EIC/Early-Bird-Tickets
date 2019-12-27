@@ -11,7 +11,7 @@ from torchvision import datasets, transforms
 from torch.autograd import Variable
 
 import models
-# from optim.sgd import SGD
+from compute_flops import print_model_param_flops
 from torch.optim import SGD
 from qtorch.quant import *
 from qtorch.optim import OptimLP
@@ -20,9 +20,12 @@ from qtorch.auto_low import sequential_lower
 
 num_types = ["weight", "activate", "grad", "error", "momentum"]
 
+
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Slimming CIFAR training')
-parser.add_argument('--dataset', type=str, default='cifar10',
+parser.add_argument('--data', type=str, default=None,
+                    help='path to dataset')
+parser.add_argument('--dataset', type=str, default='cifar100',
                     help='training dataset (default: cifar100)')
 parser.add_argument('--sparsity-regularization', '-sr', dest='sr', action='store_true',
                     help='train with channel sparsity regularization')
@@ -34,7 +37,7 @@ parser.add_argument('--test-batch-size', type=int, default=256, metavar='N',
                     help='input batch size for testing (default: 256)')
 parser.add_argument('--epochs', type=int, default=160, metavar='N',
                     help='number of epochs to train (default: 160)')
-parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
+parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--schedule', type=int, nargs='+', default=[80, 120],
                         help='Decrease learning rate at these epochs.')
@@ -56,8 +59,12 @@ parser.add_argument('--save', default='./logs', type=str, metavar='PATH',
                     help='path to save prune model (default: current directory)')
 parser.add_argument('--arch', default='vgg', type=str, 
                     help='architecture to use')
+parser.add_argument('--scratch',default='', type=str,
+                    help='the PATH to the pruned model')
 parser.add_argument('--depth', default=19, type=int,
                     help='depth of the neural network')
+# multi-gpus
+parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
 # swa
 parser.add_argument('--swa', default=False, help='SWALP start epoch')
@@ -84,75 +91,15 @@ if args.cuda:
 if not os.path.exists(args.save):
     os.makedirs(args.save)
 
-class EarlyBird():
-    def __init__(self, percent, epoch_keep=5):
-        self.percent = percent
-        self.epoch_keep = epoch_keep
-        self.masks = []
-        self.dists = [1 for i in range(1, self.epoch_keep)]
-
-    def pruning(self, model, percent):
-        total = 0
-        for m in model.modules():
-            if isinstance(m, nn.BatchNorm2d):
-                total += m.weight.data.shape[0]
-
-        bn = torch.zeros(total)
-        index = 0
-        for m in model.modules():
-            if isinstance(m, nn.BatchNorm2d):
-                size = m.weight.data.shape[0]
-                bn[index:(index+size)] = m.weight.data.abs().clone()
-                index += size
-
-        y, i = torch.sort(bn)
-        thre_index = int(total * percent)
-        thre = y[thre_index]
-        # print('Pruning threshold: {}'.format(thre))
-
-        mask = torch.zeros(total)
-        index = 0
-        for k, m in enumerate(model.modules()):
-            if isinstance(m, nn.BatchNorm2d):
-                size = m.weight.data.numel()
-                weight_copy = m.weight.data.abs().clone()
-                _mask = weight_copy.gt(thre.cuda()).float().cuda()
-                mask[index:(index+size)] = _mask.view(-1)
-                # print('layer index: {:d} \t total channel: {:d} \t remaining channel: {:d}'.format(k, _mask.shape[0], int(torch.sum(_mask))))
-                index += size
-
-        # print('Pre-processing Successful!')
-        return mask
-
-    def put(self, mask):
-        if len(self.masks) < self.epoch_keep:
-            self.masks.append(mask)
-        else:
-            self.masks.pop(0)
-            self.masks.append(mask)
-
-    def cal_dist(self):
-        if len(self.masks) == self.epoch_keep:
-            for i in range(len(self.masks)-1):
-                mask_i = self.masks[-1]
-                mask_j = self.masks[i]
-                self.dists[i] = 1 - float(torch.sum(mask_i==mask_j)) / mask_j.size(0)
-            return True
-        else:
-            return False
-
-    def early_bird_emerge(self, model):
-        mask = self.pruning(model, self.percent)
-        self.put(mask)
-        flag = self.cal_dist()
-        if flag == True:
-            print(self.dists)
-            for i in range(len(self.dists)):
-                if self.dists[i] > 0.1:
-                    return False
-            return True
-        else:
-            return False
+gpu = args.gpu_ids
+gpu_ids = args.gpu_ids.split(',')
+args.gpu_ids = []
+for gpu_id in gpu_ids:
+   id = int(gpu_id)
+   if id > 0:
+       args.gpu_ids.append(id)
+if len(args.gpu_ids) > 0:
+   torch.cuda.set_device(args.gpu_ids[0])
 
 # prepare quantization functions
 # using block floating point, allocating shared exponent along the first dimension
@@ -184,7 +131,7 @@ if args.dataset == 'cifar10':
                            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
                        ])),
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
-else:
+elif args.dataset == 'cifar100':
     train_loader = torch.utils.data.DataLoader(
         datasets.CIFAR100('./data.cifar100', train=True, download=True,
                        transform=transforms.Compose([
@@ -201,6 +148,35 @@ else:
                            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
                        ])),
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
+elif args.dataset == 'imagenet':
+    # Data loading code
+    traindir = os.path.join(args.data, 'train')
+    valdir = os.path.join(args.data, 'val')
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+
+    train_dataset = datasets.ImageFolder(
+        traindir,
+        transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize,
+        ]))
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True,
+        num_workers=16, pin_memory=True)
+
+    test_loader = torch.utils.data.DataLoader(
+        datasets.ImageFolder(valdir, transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ])),
+        batch_size=args.batch_size, shuffle=False,
+        num_workers=16, pin_memory=True)
 
 model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth)
 # automatically insert quantization modules
@@ -213,14 +189,63 @@ if args.arch == 'vgg':
 elif args.arch == 'resnet':
     model.fc = model.fc[0]
 
-if args.cuda:
-    model.cuda()
+if args.dataset == 'imagenet':
+    model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
+
+def load_checkpoint(model, checkpoint_path):
+   model_ckpt = torch.load(checkpoint_path, map_location='cpu')
+   pretrained_dict = model_ckpt['state_dict']
+   model_dict = model.state_dict()
+   new_dict = {}
+   for k in model_dict.keys():
+       pre_k = 'module.' + k
+       new_dict[k] = pretrained_dict[pre_k]
+   print('Total : {}, update: {}'.format(len(pretrained_dict), len(new_dict)))
+   model.load_state_dict(new_dict)
+   print('load checkpoint!')
+   return model
+
+if args.scratch:
+    try:
+        checkpoint = torch.load(args.scratch)
+        # print(checkpoint['state_dict'].keys())
+        model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth, cfg=checkpoint['cfg'])
+        # automatically insert quantization modules
+        model = sequential_lower(model, layer_types=["conv", "linear"],
+                             forward_number=number_dict["activate"], backward_number=number_dict["error"],
+                             forward_rounding=args.rounding, backward_rounding=args.rounding)
+        # removing the final quantization module
+        if args.arch == 'vgg':
+            model.classifier = model.classifier[0] 
+        elif args.arch == 'resnet':
+            model.fc = model.fc[0]
+
+        if args.dataset == 'imagenet':
+            model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
+        model.load_state_dict(checkpoint['state_dict'])
+    except:
+        checkpoint = torch.load(args.scratch, map_location='cpu')
+        model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth, cfg=checkpoint['cfg'])
+        # automatically insert quantization modules
+        model = sequential_lower(model, layer_types=["conv", "linear"],
+                             forward_number=number_dict["activate"], backward_number=number_dict["error"],
+                             forward_rounding=args.rounding, backward_rounding=args.rounding)
+        # removing the final quantization module
+        if args.arch == 'vgg':
+            model.classifier = model.classifier[0] 
+        elif args.arch == 'resnet':
+            model.fc = model.fc[0]
+        model = load_checkpoint(model, args.scratch)
+        # model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
 
 # Build SWALP model
 if args.swa:
-    swa_model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth)
+    swa_model = models.__dict__[args.arch](dataset=args.dataset, depth=args.depth, cfg=checkpoint['cfg'])
     swa_n = 0
     swa_model.cuda()
+
+if args.cuda:
+    model.cuda()
 
 optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 # insert quantizations into the optimization loops
@@ -228,22 +253,6 @@ optimizer = OptimLP(optimizer,
                     weight_quant=quant_dict["weight"],
                     grad_quant=quant_dict["grad"],
                     momentum_quant=quant_dict["momentum"])
-
-def save_checkpoint(state, is_best, epoch, filepath, is_swa):
-    if is_swa:
-        torch.save(state, os.path.join(filepath, 'swa.pth.tar'))
-    elif epoch == 'init':
-        filepath = os.path.join(filepath, 'init.pth.tar')
-        torch.save(state, filepath)
-    else:
-        filename = os.path.join(filepath, 'ckpt'+str(epoch)+'.pth.tar')
-        torch.save(state, filename)
-        # filename = os.path.join(filepath, 'ckpt.pth.tar')
-        # torch.save(state, filename)
-        if is_best:
-            shutil.copyfile(filename, os.path.join(filepath, 'model_best.pth.tar'))
-    if 'EB' in str(epoch):
-        filepath = os.path.join(filepath, epoch+'.pth.tar')
 
 if args.resume:
     if os.path.isfile(args.resume):
@@ -257,8 +266,6 @@ if args.resume:
               .format(args.resume, checkpoint['epoch'], best_prec1))
     else:
         print("=> no checkpoint found at '{}'".format(args.resume))
-else:
-    save_checkpoint({'state_dict': model.state_dict()}, False, epoch='init', filepath=args.save, is_swa=False)
 
 history_score = np.zeros((args.epochs, 4))
 
@@ -325,9 +332,17 @@ def test(model):
         test_acc += prec1.item()
 
     test_loss /= len(test_loader.dataset)
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
+    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.1f}%)\n'.format(
         test_loss, test_acc, len(test_loader), test_acc / len(test_loader)))
     return np.round(test_acc / len(test_loader), 2)
+
+def save_checkpoint(state, is_best, filepath, is_swa):
+    if is_swa:
+        torch.save(state, os.path.join(filepath, 'swa.pth.tar'))
+    else:
+        torch.save(state, os.path.join(filepath, 'checkpoint.pth.tar'))
+        if is_best:
+            shutil.copyfile(os.path.join(filepath, 'checkpoint.pth.tar'), os.path.join(filepath, 'model_best.pth.tar'))
 
 def moving_average(net1, net2, alpha=1):
     for param1, param2 in zip(net1.parameters(), net2.parameters()):
@@ -386,43 +401,7 @@ def bn_update(loader, model):
     model.apply(lambda module: _set_momenta(module, momenta))
 
 best_prec1 = 0.
-flag_30 = True
-flag_50 = True
-flag_70 = True
-early_bird_30 = EarlyBird(0.3)
-early_bird_50 = EarlyBird(0.5)
-early_bird_70 = EarlyBird(0.7)
 for epoch in range(args.start_epoch, args.epochs):
-    if early_bird_30.early_bird_emerge(model):
-        print("[early_bird_30] Find EB!!!!!!!!!, epoch: "+str(epoch))
-        if flag_30:
-            save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-            'optimizer': optimizer.state_dict(),
-            }, is_best, 'EB-30-'+str(epoch+1), filepath=args.save, is_swa=False)
-            flag_30 = False
-    if early_bird_50.early_bird_emerge(model):
-        print("[early_bird_50] Find EB!!!!!!!!!, epoch: "+str(epoch))
-        if flag_50:
-            save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-            'optimizer': optimizer.state_dict(),
-            }, is_best, 'EB-50-'+str(epoch+1), filepath=args.save, is_swa=False)
-            flag_50 = False
-    if early_bird_70.early_bird_emerge(model):
-        print("[early_bird_70] Find EB!!!!!!!!!, epoch: "+str(epoch))
-        if flag_70:
-            save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-            'optimizer': optimizer.state_dict(),
-            }, is_best, 'EB-70-'+str(epoch+1), filepath=args.save, is_swa=False)
-            flag_70 = False
     if epoch in args.schedule:
         for param_group in optimizer.param_groups:
             param_group['lr'] *= 0.1
@@ -437,7 +416,7 @@ for epoch in range(args.start_epoch, args.epochs):
         'state_dict': model.state_dict(),
         'best_prec1': best_prec1,
         'optimizer': optimizer.state_dict(),
-    }, is_best, epoch, filepath=args.save, is_swa=False)
+    }, is_best, filepath=args.save, is_swa=False)
 
     if args.swa and epoch >= args.swa_start:
         moving_average(swa_model, model, 1.0 / (swa_n + 1))
@@ -450,7 +429,7 @@ for epoch in range(args.start_epoch, args.epochs):
         'state_dict': swa_model.state_dict(),
         'prec1': prec1,
         'optimizer': optimizer.state_dict(),
-    }, is_best, epoch, filepath=args.save, is_swa=True)
+    }, is_best, filepath=args.save, is_swa=True)
     else:
         history_score[epoch][3] = 0.0
 

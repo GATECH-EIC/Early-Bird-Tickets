@@ -1,6 +1,6 @@
 import argparse
 import numpy as np
-import os
+import os,sys
 
 import torch
 import torch.nn as nn
@@ -9,7 +9,6 @@ from torchvision import datasets, transforms
 from compute_flops import print_model_param_nums, print_model_param_flops
 
 import models
-from models import *
 from qtorch.quant import *
 from qtorch.optim import OptimLP
 from qtorch import BlockFloatingPoint, FixedPoint, FloatingPoint
@@ -23,20 +22,18 @@ parser.add_argument('--data', type=str, default=None,
                     help='path to dataset')
 parser.add_argument('--dataset', type=str, default='cifar100',
                     help='training dataset (default: cifar10)')
-parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
+parser.add_argument('--test-batch-size', type=int, default=256, metavar='N',
                     help='input batch size for testing (default: 256)')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
-parser.add_argument('--depth', type=int, default=164,
-                    help='depth of the resnet')
+parser.add_argument('--depth', type=int, default=19,
+                    help='depth of the vgg')
 parser.add_argument('--percent', type=float, default=0.5,
                     help='scale sparse rate (default: 0.5)')
 parser.add_argument('--model', default='', type=str, metavar='PATH',
                     help='path to the model (default: none)')
 parser.add_argument('--save', default='', type=str, metavar='PATH',
                     help='path to save pruned model (default: none)')
-parser.add_argument('--arch', default='resnet', type=str, 
-                    help='architecture to use')
 # multi-gpus
 parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
@@ -50,10 +47,6 @@ parser.add_argument('--rounding'.format(num), type=str, default='stochastic', me
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
-
-torch.manual_seed(1)
-if args.cuda:
-    torch.cuda.manual_seed(1)
 
 if not os.path.exists(args.save):
     os.makedirs(args.save)
@@ -79,13 +72,15 @@ for num in ["weight", "momentum", "grad"]:
     quant_dict[num] = quantizer(forward_number=number_dict[num],
                                 forward_rounding=args.rounding)
 
-model = models.__dict__['resnet'](dataset=args.dataset, depth=args.depth)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+model = models.__dict__['vgg'](dataset=args.dataset, depth=args.depth)
 # automatically insert quantization modules
 model = sequential_lower(model, layer_types=["conv", "linear"],
                          forward_number=number_dict["activate"], backward_number=number_dict["error"],
                          forward_rounding=args.rounding, backward_rounding=args.rounding)
 # removing the final quantization module
-model.fc = model.fc[0]
+model.classifier = model.classifier[0] 
 
 if args.model:
     if os.path.isfile(args.model):
@@ -99,68 +94,79 @@ if args.model:
             model = torch.nn.DataParallel(model, device_ids=args.gpu_ids).cuda()
             model.load_state_dict(checkpoint['state_dict'])
         # print("=> loaded checkpoint '{}' (epoch {}) Prec1: {:f}"
-            #   .format(args.model, checkpoint['epoch'], best_prec1))
+              # .format(args.model, checkpoint['epoch'], best_prec1))
     else:
-        print("=> no checkpoint found at '{}'".format(args.resume))
+        print("=> no checkpoint found at '{}'".format(args.model))
 
 print('original model param: ', print_model_param_nums(model))
-if args.dataset == "imagenet":
-    print('original model flops: ', print_model_param_flops(model, 224, True))
-else:
-    print('original model flops: ', print_model_param_flops(model, 32, True))
+print('original model flops: ', print_model_param_flops(model, 32, True))
 
 if args.cuda:
     model.cuda()
 
 total = 0
-
 for m in model.modules():
     if isinstance(m, nn.BatchNorm2d):
         total += m.weight.data.shape[0]
 
-bn = torch.zeros(total)
-index = 0
+bn = []
+protective_thre = {}
+bn_index = 0
 for m in model.modules():
     if isinstance(m, nn.BatchNorm2d):
+        bn_index += 1
         size = m.weight.data.shape[0]
-        bn[index:(index+size)] = m.weight.data.abs().clone()
-        index += size
+        w = m.weight.data.abs().clone()
+        # protective layer-wise threshold
+        y, i = torch.sort(w)
+        thre_index = int(size * 0.9) # protect top 10%
+        protective_thre[bn_index] = y[thre_index]
+        # remaining channels are needed to prune
+        for item in y[:thre_index]:
+            bn.append(item)
 
+bn = torch.FloatTensor(bn)
 p_flops = 0
 y, i = torch.sort(bn)
+# comparsion and permutation (sort process)
 p_flops += total * np.log2(total) * 3
 thre_index = int(total * args.percent)
 thre = y[thre_index]
 
-
 pruned = 0
 cfg = []
 cfg_mask = []
+bn_index = 0
 for k, m in enumerate(model.modules()):
     if isinstance(m, nn.BatchNorm2d):
+        bn_index += 1
         weight_copy = m.weight.data.abs().clone()
-        mask = weight_copy.gt(thre.cuda()).float().cuda()
+        _mask = weight_copy.gt(thre.cuda()).float().cuda()
+        # add protective channels
+        protective_mask = weight_copy.gt(protective_thre[bn_index].cuda()).float().cuda()
+        mask = torch.zeros(_mask.size())
+        for i, (a, b) in enumerate(zip(_mask, protective_mask)):
+            if a==1 or b==1:
+                mask[i] = 1
+        mask = mask.cuda()
         pruned = pruned + mask.shape[0] - torch.sum(mask)
         m.weight.data.mul_(mask)
         m.bias.data.mul_(mask)
-        num = int(torch.sum(mask))
-        if num != 0:
-            cfg.append(num)
-            cfg_mask.append(mask.clone())
-        elif num == 0:
-            cfg.append(1)
-            _mask = mask.clone()
-            _mask[0] = 1
-            cfg_mask.append(_mask)
+        if int(torch.sum(mask)) > 0:
+            cfg.append(int(torch.sum(mask)))
+        cfg_mask.append(mask.clone())
         print('layer index: {:d} \t total channel: {:d} \t remaining channel: {:d}'.
             format(k, mask.shape[0], int(torch.sum(mask))))
-    # elif isinstance(m, nn.MaxPool2d):
-    #     cfg.append('M')
+    elif isinstance(m, nn.MaxPool2d):
+        cfg.append('M')
 
-pruned_ratio = pruned/total
+# apply mask flops
+# p_flops += total
 
 # compare two mask distance
 p_flops += 2 * total #(minus and sum)
+
+pruned_ratio = pruned/total
 
 print('  + Memory Request: %.2fKB' % float(total * 32 / 1024 / 8))
 print('  + Flops for pruning: %.2fM' % (p_flops / 1e6))
@@ -190,13 +196,13 @@ def test(model):
             datasets.CIFAR10('./data.cifar10', train=False, transform=transforms.Compose([
                 transforms.ToTensor(),
                 transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])),
-            batch_size=args.test_batch_size, shuffle=False, **kwargs)
+            batch_size=args.test_batch_size, shuffle=True, **kwargs)
     elif args.dataset == 'cifar100':
         test_loader = torch.utils.data.DataLoader(
             datasets.CIFAR100('./data.cifar100', train=False, transform=transforms.Compose([
                 transforms.ToTensor(),
                 transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])),
-            batch_size=args.test_batch_size, shuffle=False, **kwargs)
+            batch_size=args.test_batch_size, shuffle=True, **kwargs)
     elif args.dataset == 'imagenet':
         # Data loading code
         traindir = os.path.join(args.data, 'train')
@@ -222,7 +228,8 @@ def test(model):
             data, target = data.cuda(), target.cuda()
         data, target = Variable(data, volatile=True), Variable(target)
         output = model(data)
-        pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
+        # pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
+        # correct += pred.eq(target.data.view_as(pred)).cpu().sum()
         prec1, prec5 = accuracy(output.data, target.data, topk=(1, 5))
         test_acc += prec1.item()
 
@@ -230,21 +237,19 @@ def test(model):
         test_acc, len(test_loader), test_acc / len(test_loader)))
     return np.round(test_acc / len(test_loader), 2)
 
-# acc = test(model)
+acc = test(model)
 
-print("Cfg:")
+# Make real prune
 print(cfg)
-
-# newmodel = resnet(depth=args.depth, dataset=args.dataset, cfg=cfg)
-newmodel = models.__dict__['resnet'](dataset=args.dataset, depth=args.depth, cfg=cfg)
+newmodel = models.__dict__['vgg'](dataset=args.dataset, depth=args.depth, cfg=cfg)
 # automatically insert quantization modules
 newmodel = sequential_lower(newmodel, layer_types=["conv", "linear"],
                          forward_number=number_dict["activate"], backward_number=number_dict["error"],
                          forward_rounding=args.rounding, backward_rounding=args.rounding)
 # removing the final quantization module
-newmodel.fc = newmodel.fc[0]
+newmodel.classifier = newmodel.classifier[0] 
 
-if len(args.gpu_ids) > 1:
+if len(args.gpu_ids) > 0:
     newmodel = torch.nn.DataParallel(newmodel, device_ids=args.gpu_ids)
 if args.cuda:
     newmodel.cuda()
@@ -254,81 +259,48 @@ savepath = os.path.join(args.save, "prune.txt")
 with open(savepath, "w") as fp:
     fp.write("Configuration: \n"+str(cfg)+"\n")
     fp.write("Number of parameters: \n"+str(num_parameters)+"\n")
-    # fp.write("Test accuracy: \n"+str(acc))
+    fp.write("Test accuracy: \n"+str(acc))
 
-old_modules = list(model.modules())
-new_modules = list(newmodel.modules())
 layer_id_in_cfg = 0
 start_mask = torch.ones(3)
 end_mask = cfg_mask[layer_id_in_cfg]
-conv_count = 0
-
-for layer_id in range(len(old_modules)):
-    m0 = old_modules[layer_id]
-    m1 = new_modules[layer_id]
+for [m0, m1] in zip(model.modules(), newmodel.modules()):
     if isinstance(m0, nn.BatchNorm2d):
+        if torch.sum(end_mask) == 0:
+            continue
         idx1 = np.squeeze(np.argwhere(np.asarray(end_mask.cpu().numpy())))
         if idx1.size == 1:
             idx1 = np.resize(idx1,(1,))
-
-        if isinstance(old_modules[layer_id + 1], channel_selection):
-            # If the next layer is the channel selection layer, then the current batchnorm 2d layer won't be pruned.
-            m1.weight.data = m0.weight.data.clone()
-            m1.bias.data = m0.bias.data.clone()
-            m1.running_mean = m0.running_mean.clone()
-            m1.running_var = m0.running_var.clone()
-
-            # We need to set the channel selection layer.
-            m2 = new_modules[layer_id + 1]
-            m2.indexes.data.zero_()
-            m2.indexes.data[idx1.tolist()] = 1.0
-
-            layer_id_in_cfg += 1
-            start_mask = end_mask.clone()
-            if layer_id_in_cfg < len(cfg_mask):
-                end_mask = cfg_mask[layer_id_in_cfg]
-        else:
-            m1.weight.data = m0.weight.data[idx1.tolist()].clone()
-            m1.bias.data = m0.bias.data[idx1.tolist()].clone()
-            m1.running_mean = m0.running_mean[idx1.tolist()].clone()
-            m1.running_var = m0.running_var[idx1.tolist()].clone()
-            layer_id_in_cfg += 1
-            start_mask = end_mask.clone()
-            if layer_id_in_cfg < len(cfg_mask):  # do not change in Final FC
-                end_mask = cfg_mask[layer_id_in_cfg]
+        m1.weight.data = m0.weight.data[idx1.tolist()].clone()
+        m1.bias.data = m0.bias.data[idx1.tolist()].clone()
+        m1.running_mean = m0.running_mean[idx1.tolist()].clone()
+        m1.running_var = m0.running_var[idx1.tolist()].clone()
+        layer_id_in_cfg += 1
+        start_mask = end_mask.clone()
+        if layer_id_in_cfg < len(cfg_mask):  # do not change in Final FC
+            end_mask = cfg_mask[layer_id_in_cfg]
     elif isinstance(m0, nn.Conv2d):
-        if conv_count == 0:
-            m1.weight.data = m0.weight.data.clone()
-            conv_count += 1
+        if torch.sum(end_mask) == 0:
             continue
-        if isinstance(old_modules[layer_id-2], channel_selection) or isinstance(old_modules[layer_id-2], nn.BatchNorm2d):
-            # This convers the convolutions in the residual block.
-            # The convolutions are either after the channel selection layer or after the batch normalization layer.
-            conv_count += 1
-            idx0 = np.squeeze(np.argwhere(np.asarray(start_mask.cpu().numpy())))
-            idx1 = np.squeeze(np.argwhere(np.asarray(end_mask.cpu().numpy())))
-            print('In shape: {:d}, Out shape {:d}.'.format(idx0.size, idx1.size))
-            if idx0.size == 1:
-                idx0 = np.resize(idx0, (1,))
-            if idx1.size == 1:
-                idx1 = np.resize(idx1, (1,))
-            w1 = m0.weight.data[:, idx0.tolist(), :, :].clone()
+        idx0 = np.squeeze(np.argwhere(np.asarray(start_mask.cpu().numpy())))
+        idx1 = np.squeeze(np.argwhere(np.asarray(end_mask.cpu().numpy())))
+        # random set for test
+        # new_end_mask = np.asarray(end_mask.cpu().numpy())
+        # new_end_mask = np.append(new_end_mask[int(len(new_end_mask)/2):], new_end_mask[:int(len(new_end_mask)/2)])
+        # idx1 = np.squeeze(np.argwhere(new_end_mask))
 
-            # If the current convolution is not the last convolution in the residual block, then we can change the 
-            # number of output channels. Currently we use `conv_count` to detect whether it is such convolution.
-            if conv_count % 3 != 1:
-                w1 = w1[idx1.tolist(), :, :, :].clone()
-            m1.weight.data = w1.clone()
-            continue
-
-        # We need to consider the case where there are downsampling convolutions. 
-        # For these convolutions, we just copy the weights.
-        m1.weight.data = m0.weight.data.clone()
+        print('In shape: {:d}, Out shape {:d}.'.format(idx0.size, idx1.size))
+        if idx0.size == 1:
+            idx0 = np.resize(idx0, (1,))
+        if idx1.size == 1:
+            idx1 = np.resize(idx1, (1,))
+        w1 = m0.weight.data[:, idx0.tolist(), :, :].clone()
+        w1 = w1[idx1.tolist(), :, :, :].clone()
+        m1.weight.data = w1.clone()
     elif isinstance(m0, nn.Linear):
         idx0 = np.squeeze(np.argwhere(np.asarray(start_mask.cpu().numpy())))
         if idx0.size == 1:
             idx0 = np.resize(idx0, (1,))
-
         m1.weight.data = m0.weight.data[:, idx0].clone()
         m1.bias.data = m0.bias.data.clone()
 
@@ -338,11 +310,7 @@ torch.save({'cfg': cfg, 'state_dict': newmodel.state_dict()}, os.path.join(args.
 model = newmodel
 # test(model)
 param = print_model_param_nums(model)
-if args.dataset == "imagenet":
-    flops = print_model_param_flops(model, 224, True)
-else:
-    flops = print_model_param_flops(model.cpu(), 32, True)
-
+flops = print_model_param_flops(model.cpu(), 32, True)
 with open(savepath, "w") as fp:
     fp.write("new model param: \n"+str(param)+"\n")
     fp.write("new model flops: \n"+str(flops)+"\n")
