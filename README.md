@@ -182,7 +182,44 @@ CUDA_VISIBLE_DEVICES=0 python main_scratch.py \
 </div>
 
 ## ImageNet Experiments
-All pretrained checkpoints of different pruning ratio has been collected in [Google Drive](https://drive.google.com/open?id=18yivxGmIlBcq_VYBn_SlGHHSYX3whuy3).
+All pretrained checkpoints of different pruning ratio have been collected in [Google Drive](https://drive.google.com/open?id=1aTl47KR8oaHkOxqKOUDgQyI96dW7JgHJ). To evaluate the inference accuracy of test set, we provide evaluation scripts ( `EVAL_ResNet18_ImageNet.py` and `EVAL_ResNet50_ImageNet.py` ) and corresponding commands shown below for your convenience.
+
+````
+python EVAL_ResNet18_ImageNet.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet18 \
+--depth 18 \
+--lr 0.1 \
+--epochs 90 \
+--schedule 30 60 \
+--batch-size 128 \
+--test-batch-size 64 \
+--save ./EBTrain-ImageNet/ResNet18/temp \
+--resume ./EBTrain-ImageNet/ResNet18/retrain_1011_0.1/model_best.pth.tar \
+--scratch ./EBTrain-ImageNet/ResNet18/pruned_1011_0.1/pruned.pth.tar \
+--momentum 0.9 \
+--sparsity-regularization \
+--gpu_ids 4
+````
+
+````
+python -m torch.distributed.launch EVAL_ResNet50_ImageNet.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet50_prune \
+--depth 50 \
+--lr 0.1 \
+--epochs 90 \
+--schedule 30 60 \
+--batch-size 128 \
+--test-batch-size 128 \
+--save ./EBTrain-ImageNet/ResNet50/temp \
+--scratch ./EBTrain-ImageNet/ResNet50/pruned_3010_0.3/pruned.pth.tar \
+--resume ./EBTrain-ImageNet/ResNet50/retrain_3010_0.3/model_best.pth.tar \
+--momentum 0.9 \
+--gpu_ids 0,1,2,3
+````
 
 ### ResNet18 on ImageNet
 * search for EB tickets
@@ -197,24 +234,25 @@ CUDA_VISIBLE_DEVICES=0 python main.py \
 --schedule 30 60 \
 --batch-size 256 \
 --test-batch-size 64 \
+--save ./EBTrain-ImageNet/ResNet18 \
 --momentum 0.9 \
---sparsity-regularization \
+--sparsity-regularization
 ````
 * real prune the EB tickets
 ````
-CUDA_VISIBLE_DEVICES=0 python resprune.py \
+CUDA_VISIBLE_DEVICES=5 python resprune.py \
 --dataset imagenet \
 --data /data3/imagenet-data/raw-data \
 --arch resnet18 \
 --test-batch-size 128 \
 --depth 18 \
 --percent 0.3 \
---model ./resnet18-imagenet/resnet18_0/EB-30-11.pth.tar \
---save ./resnet18-imagenet/resnet18_0/pruned_3011_0.3 \
+--model ./EBTrain-ImageNet/ResNet18/EB-30-11.pth.tar \
+--save ./EBTrain-ImageNet/ResNet18/pruned_3011_0.3 \
 ````
-* retrian to restore accuracy
+* retrain to restore accuracy
 ````
-CUDA_VISIBLE_DEVICES=0 python main_c.py \
+CUDA_VISIBLE_DEVICES=3 python main_c.py \
 --dataset imagenet \
 --data /data3/imagenet-data/raw-data \
 --arch resnet18 \
@@ -224,10 +262,10 @@ CUDA_VISIBLE_DEVICES=0 python main_c.py \
 --schedule 30 60 \
 --batch-size 128 \
 --test-batch-size 64 \
---save ./resnet18-imagenet/resnet18_0/retrain_3011_0.1 \
+--save ./EBTrain-ImageNet/ResNet18/retrain_1011_0.1 \
 --momentum 0.9 \
 --sparsity-regularization \
---scratch ./resnet18-imagenet/resnet18_0/pruned_3011_0.1/pruned.pth.tar \
+--scratch ./EBTrain-ImageNet/ResNet18/pruned_1011_0.1/pruned.pth.tar \
 --start-epoch 11
 ````
 
@@ -249,7 +287,7 @@ python -m torch.distributed.launch main_resnet50.py \
 --schedule 30 60 \
 --batch-size 256 \
 --test-batch-size 64 \
---save ./resnet50-imagenet/resnet50_0/temp \
+--save ./EBTrain-ImageNet/ResNet50 \
 --momentum 0.9 \
 --sparsity-regularization \
 --gpu_ids 0,1,2,3
@@ -263,10 +301,10 @@ python resprune_50.py \
 --test-batch-size 128 \
 --depth 50 \
 --percent 0.7 \
---model ./resnet50-imagenet/resnet50_0/EB-70-8.pth.tar \
---save ./resnet50-imagenet/resnet50_0/pruned_7008_0.7
+--model ./EBTrain-ImageNet/ResNet50/EB-70-8.pth.tar \
+--save ./EBTrain-ImageNet/ResNet50/pruned_7008_0.7
 ````
-* retrian to restore accuracy
+* retrain to restore accuracy
 ````
 python -m torch.distributed.launch main_resnet50.py \
 --dataset imagenet \
@@ -278,11 +316,12 @@ python -m torch.distributed.launch main_resnet50.py \
 --schedule 30 60 \
 --batch-size 256 \
 --test-batch-size 128 \
---save ./resnet50-imagenet/resnet50_0/retrain_7008_0.7 \
---scratch ./resnet50-imagenet/resnet50_0/pruned_7008_0.7/pruned.pth.tar \
+--save ./EBTrain-ImageNet/ResNet50/retrain_7008_0.7 \
+--scratch ./EBTrain-ImageNet/ResNet50/pruned_7008_0.7/pruned.pth.tar \
 --momentum 0.9 \
 --gpu_ids 4,5,6,7 \
---port 14000
+--port 14000 \
+--start-epoch 8
 ````
 
 
@@ -302,4 +341,5 @@ url={https://openreview.net/forum?id=BJxsrgStvr}
 
 ## Acknowledgement
 * Code is inspired by [Rethink-Network-Pruning](https://github.com/Eric-mingjie/rethinking-network-pruning).
-* Thank for the constructive suggestions of [Yifan](https://github.com/yueruchen) and [Tianlong](https://github.com/TianlongChenTAMU) ...
+* Thanks for the constructive suggestions of [Yifan](https://github.com/yueruchen) and [Tianlong](https://github.com/TianlongChenTAMU) ...
+* Thanks for [Yifan](https://github.com/yueruchen) for helping accelerate ImageNet training.
