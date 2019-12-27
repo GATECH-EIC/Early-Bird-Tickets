@@ -8,7 +8,36 @@ This is PyTorch implementation of [Drawing Early-Bird Tickets: Toward More Effic
 ICLR 2020 spotlight oral paper
 
 ## Table of Content
-[TOC]
+<!-- [TOC] -->
+<div class="toc">
+<ul>
+<li><a href="#early-bird-tickets">Early-Bird-Tickets</a><ul>
+<li><a href="#table-of-content">Table of Content</a></li>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#early-bird-tickets_1">Early-Bird Tickets</a><ul>
+<li><a href="#existence-of-early-bird-tickets">Existence of Early-Bird Tickets</a></li>
+<li><a href="#identify-early-bird-tickets">Identify Early-Bird Tickets</a></li>
+<li><a href="#efficient-training-via-early-bird-tickets">Efficient Training via Early-Bird Tickets</a></li>
+</ul>
+</li>
+<li><a href="#basic-usage">Basic Usage</a><ul>
+<li><a href="#prerequisites">Prerequisites</a></li>
+<li><a href="#core-training-options">Core Training Options</a></li>
+<li><a href="#standard-train-for-identifying-early-bird-tickets">Standard Train for Identifying Early-Bird Tickets</a></li>
+<li><a href="#retrain-to-restore-accuracy">Retrain to Restore Accuracy</a></li>
+</ul>
+</li>
+<li><a href="#imagenet-experiments">ImageNet Experiments</a><ul>
+<li><a href="#resnet18-on-imagenet">ResNet18 on ImageNet</a></li>
+<li><a href="#resnet50-on-imagenet">ResNet50 on ImageNet</a></li>
+</ul>
+</li>
+<li><a href="#citation">Citation</a></li>
+<li><a href="#acknowledgement">Acknowledgement</a></li>
+</ul>
+</li>
+</ul>
+</div>
 
 ## Introduction
 
