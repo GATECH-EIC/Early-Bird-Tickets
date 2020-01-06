@@ -56,7 +56,7 @@ Experiments based on various deep networks and datasets validate: 1) the existen
 ## Early-Bird Tickets
 
 ### Existence of Early-Bird Tickets
-To articulate the Early-Bird (EB) tickets phenomenon: the winning tickets can be drawn very early in training, we perform ablation simulation using two representative deep models (VGG16 and PreResNet101) on two popular datasets (CIFAR10 and CIFAR100). Specifically, we follow the main idea of [(Frankle & Carbin, 2019)](https://openreview.net/forum?id=rJl-b3RcF7) but instead prune networks trained at earlier points to see if reliable tickets can be drawn. We adopt the same channel pruning in [(Liu et al., 2017)](http://openaccess.thecvf.com/content_iccv_2017/html/Liu_Learning_Efficient_Convolutional_ICCV_2017_paper.html) for all experiments since it aligns with our end goal of efficient trianing. Below figure demonstrates the existence of EB tickets.
+To articulate the Early-Bird (EB) tickets phenomenon: the winning tickets can be drawn very early in training, we perform ablation simulation using two representative deep models (VGG16 and PreResNet101) on two popular datasets (CIFAR10 and CIFAR100). Specifically, we follow the main idea of [(Frankle & Carbin, 2019)](https://openreview.net/forum?id=rJl-b3RcF7) but instead prune networks trained at earlier points to see if reliable tickets can be drawn. We adopt the same channel pruning in [(Liu et al., 2017)](http://openaccess.thecvf.com/content_iccv_2017/html/Liu_Learning_Efficient_Convolutional_ICCV_2017_paper.html) as pruning techniuqes for all experiments since it aligns with our end goal of efficient trianing. Below figure demonstrates the existence of EB tickets. (p = 30% means 30% weights are pruned)
 
 ![](./assets/eb-retrain.png)
 
