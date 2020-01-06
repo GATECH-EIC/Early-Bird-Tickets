@@ -56,7 +56,7 @@ Experiments based on various deep networks and datasets validate: 1) the existen
 ## Early-Bird Tickets
 
 ### Existence of Early-Bird Tickets
-To articulate the Early-Bird (EB) tickets phenomenon: the winning tickets can be drawn very early in training, we perform ablation simulation using two representative deep models (VGG16 and PreResNet101) on two popular datasets (CIFAR10 and CIFAR100). Specifically, we follow the main idea of [(Frankle & Carbin, 2019)](https://openreview.net/forum?id=rJl-b3RcF7) but instead prune networks trained at earlier points to see if reliable tickets can be drawn. We adopt the same channel pruning in [(Liu et al., 2017)](http://openaccess.thecvf.com/content_iccv_2017/html/Liu_Learning_Efficient_Convolutional_ICCV_2017_paper.html) as pruning techniuqes for all experiments since it aligns with our end goal of efficient trianing. Below figure demonstrates the existence of EB tickets. (p = 30% means 30% weights are pruned)
+To articulate the Early-Bird (EB) tickets phenomenon: the winning tickets can be drawn very early in training, we perform ablation simulation using two representative deep models (VGG16 and PreResNet101) on two popular datasets (CIFAR10 and CIFAR100). Specifically, we follow the main idea of [(Frankle & Carbin, 2019)](https://openreview.net/forum?id=rJl-b3RcF7) but instead prune networks trained at earlier points to see if reliable tickets can be drawn. We adopt the same channel pruning in [(Liu et al., 2017)](http://openaccess.thecvf.com/content_iccv_2017/html/Liu_Learning_Efficient_Convolutional_ICCV_2017_paper.html) as pruning techniuqes for all experiments since it aligns with our end goal of efficient trianing. Below figure demonstrates the existence of EB tickets (p = 30% means 30% weights are pruned, hollow star means retraining accuracy of subnetwork drawn from checkpoint with best accuracy in search stage).
 
 ![](./assets/eb-retrain.png)
 
@@ -108,24 +108,26 @@ The code has the following dependencies:
 
 
 ### Standard Train for Identifying Early-Bird Tickets
-* e.g., for VGG16 performed on CIFAR-100
+Example: Reproduce early-bird (EB) tickets on CIFAR-100
+
+* Step1: Standard train to find EB tickets at different pruning ratio. Note that one can directly stop training after identifying the emergence of EB tickets while we keep training here to compare among underlying subnetworks drawn at different training stages.
 
 ````
 CUDA_VISIBLE_DEVICES=0 python main.py \
-    --dataset cifar100 \
-    --arch vgg \
-    --depth 16 \
-    --lr 0.1 \
-    --epochs 160 \
-    --schedule 80 120 \
-    --batch-size 256 \
-    --test-batch-size 256 \
-    --save ./baseline/vgg16-cifar100 \
-    --momentum 0.9 \
-    --sparsity-regularization
+--dataset cifar100 \
+--arch vgg \
+--depth 16 \
+--lr 0.1 \
+--epochs 160 \
+--schedule 80 120 \
+--batch-size 256 \
+--test-batch-size 256 \
+--save ./baseline/vgg16-cifar100 \
+--momentum 0.9 \
+--sparsity-regularization
 ````
 
-* real prune the saved checkpoints
+* Step2: Conduct real prune for the saved checkpoints (checkpoints containing EB tickets are represented as `EB-{pruning ratio}-{drawing epoch}.pth.tar` format).
 
 ````
 python vggprune.py \
@@ -139,7 +141,9 @@ python vggprune.py \
 ````
 
 ### Retrain to Restore Accuracy
-* e.g., for VGG16 performed on CIFAR-100 (finetune)
+Example: Retrain drawn EB tickets (e.g., VGG16 for CIFAR-100) to restore accuracy
+
+* Finetune EB tickets from emergence epoch. Note we keep sparsity regularization for underlying iterative pruning.
 
 ````
 CUDA_VISIBLE_DEVICES=0 python main_c.py \
@@ -155,11 +159,10 @@ CUDA_VISIBLE_DEVICES=0 python main_c.py \
 --momentum 0.9 \
 --sparsity-regularization \
 --scratch ./baseline/vgg16-cifar100/pruned_1035_0.1/pruned.pth.tar \
---gpu_ids 0 \
---start_epoch 35
+--start-epoch 35
 ````
 
-* e.g., for VGG16 performed on CIFAR-100 (from scratch)
+* Retrain re-initialized EB tickets from scratch (refer to `EB Train (re-init)` in Sec. 4.3 of paper).
 
 ````
 CUDA_VISIBLE_DEVICES=0 python main_scratch.py \
@@ -179,52 +182,52 @@ CUDA_VISIBLE_DEVICES=0 python main_scratch.py \
 ````
 
 ### Low Precision Search and Retrain
-We perform low precision method [SWALP](https://arxiv.org/pdf/1904.11943.pdf) to both the search and retrian stages, e.g., for VGG16 performed on CIFAR-10.
+We perform low precision method [SWALP](https://arxiv.org/pdf/1904.11943.pdf) to both the search and retrian stages (refer to `EB Train LL` in Sec. 4.3 of paper). Below is the guidance taking VGG16 performed on CIFAR-10 as an example:
 
-* search stage:
+* Step1:  Standard train to find EB tickets at different pruning ratio.
 
 ````
 CUDA_VISIBLE_DEVICES=0 python main_lp.py \
-    --dataset cifar10 \
-    --arch vgg \
-    --depth 16 \
-    --lr 0.1 \
-    --epochs 160 \
-    --schedule 80 120 \
-    --batch-size 256 \
-    --test-batch-size 256 \
-    --save ./lp_baseline/vgg16-cifar10 \
-    --momentum 0.9 \
-    --sparsity-regularization \
-    --swa True \
-    --swa_start 140 \
-    --wl-weight 8 \
-    --wl-grad 8 \
-    --wl-activate 8 \
-    --wl-error 8 \
-    --wl-momentum 8 \
-    --rounding stochastic
+--dataset cifar10 \
+--arch vgg \
+--depth 16 \
+--lr 0.1 \
+--epochs 160 \
+--schedule 80 120 \
+--batch-size 256 \
+--test-batch-size 256 \
+--save ./lp_baseline/vgg16-cifar10 \
+--momentum 0.9 \
+--sparsity-regularization \
+--swa True \
+--swa_start 140 \
+--wl-weight 8 \
+--wl-grad 8 \
+--wl-activate 8 \
+--wl-error 8 \
+--wl-momentum 8 \
+--rounding stochastic
 ````
 
-* real prune the saved checkpoints:
+* Step 2: Conduct real prune for the saved checkpoints.
 
 ````
 CUDA_VISIBLE_DEVICES=0 python vggprune_lp.py \
-    --dataset cifar10 \
-    --test-batch-size 256 \
-    --depth 16 \
-    --percent 0.3 \
-    --model ./lp_baseline/vgg16-cifar10/EB-30-32.pth.tar \
-    --save ./lp_baseline/vgg16-cifar10/pruned_3032_0.3 \
-    --wl-weight 8 \
-    --wl-grad 8 \
-    --wl-activate 8 \
-    --wl-error 8 \
-    --wl-momentum 8 \
-    --rounding stochastic
+--dataset cifar10 \
+--test-batch-size 256 \
+--depth 16 \
+--percent 0.3 \
+--model ./lp_baseline/vgg16-cifar10/EB-30-32.pth.tar \
+--save ./lp_baseline/vgg16-cifar10/pruned_3032_0.3 \
+--wl-weight 8 \
+--wl-grad 8 \
+--wl-activate 8 \
+--wl-error 8 \
+--wl-momentum 8 \
+--rounding stochastic
 ````
 
-* retrain to restore accuracy:
+* Step 3: Finetune EB tickets from emergence epoch.
 
 ````
 CUDA_VISIBLE_DEVICES=0 python main_c_lp.py \
@@ -238,7 +241,7 @@ CUDA_VISIBLE_DEVICES=0 python main_c_lp.py \
 --test-batch-size 128 \
 --scratch ./lp_baseline/vgg16-cifar10/pruned_3032_0.3/pruned.pth.tar \
 --save ./lp_baseline/vgg16-cifar10/lp_retrain_3032_0.3 \
---start_epoch 32 \
+--start-epoch 32 \
 --momentum 0.9 \
 --sparsity-regularization \
 --swa True \
@@ -251,7 +254,7 @@ CUDA_VISIBLE_DEVICES=0 python main_c_lp.py \
 --rounding stochastic
 ````
 
-* comparison example
+* Comparison example
 
 <div align=left>
     <img src="./assets/vgg-result.png" width = "800" alt="eb-train"  />
@@ -276,7 +279,7 @@ python EVAL_ResNet18_ImageNet.py \
 --scratch ./EBTrain-ImageNet/ResNet18/pruned_1011_0.1/pruned.pth.tar \
 --momentum 0.9 \
 --sparsity-regularization \
---gpu_ids 4
+--gpu_ids 0
 ````
 
 ````
@@ -298,7 +301,7 @@ python -m torch.distributed.launch EVAL_ResNet50_ImageNet.py \
 ````
 
 ### ResNet18 on ImageNet
-* search for EB tickets
+* Step1:  Standard train to find EB tickets at different pruning ratio.
 ````
 CUDA_VISIBLE_DEVICES=0 python main.py \
 --dataset imagenet \
@@ -314,9 +317,9 @@ CUDA_VISIBLE_DEVICES=0 python main.py \
 --momentum 0.9 \
 --sparsity-regularization
 ````
-* real prune the EB tickets
+* Step 2: Conduct real prune for the saved checkpoints.
 ````
-CUDA_VISIBLE_DEVICES=5 python resprune.py \
+CUDA_VISIBLE_DEVICES=0 python resprune.py \
 --dataset imagenet \
 --data /data3/imagenet-data/raw-data \
 --arch resnet18 \
@@ -326,9 +329,9 @@ CUDA_VISIBLE_DEVICES=5 python resprune.py \
 --model ./EBTrain-ImageNet/ResNet18/EB-30-11.pth.tar \
 --save ./EBTrain-ImageNet/ResNet18/pruned_3011_0.3 \
 ````
-* retrain to restore accuracy
+* Step 3: Finetune EB tickets from emergence epoch.
 ````
-CUDA_VISIBLE_DEVICES=3 python main_c.py \
+CUDA_VISIBLE_DEVICES=0 python main_c.py \
 --dataset imagenet \
 --data /data3/imagenet-data/raw-data \
 --arch resnet18 \
@@ -351,7 +354,7 @@ CUDA_VISIBLE_DEVICES=3 python main_c.py \
 </div>
 
 ### ResNet50 on ImageNet
-* search for EB tickets
+* Step1: Standard train to find EB tickets at different pruning ratio.
 ````
 python -m torch.distributed.launch main_resnet50.py \
 --dataset imagenet \
@@ -368,7 +371,7 @@ python -m torch.distributed.launch main_resnet50.py \
 --sparsity-regularization \
 --gpu_ids 0,1,2,3
 ````
-* real prune the EB tickets
+* Step 2: Conduct real prune for the saved checkpoints.
 ````
 python resprune_50.py \
 --dataset imagenet \
@@ -380,7 +383,7 @@ python resprune_50.py \
 --model ./EBTrain-ImageNet/ResNet50/EB-70-8.pth.tar \
 --save ./EBTrain-ImageNet/ResNet50/pruned_7008_0.7
 ````
-* retrain to restore accuracy
+* Step 3: Finetune EB tickets from emergence epoch.
 ````
 python -m torch.distributed.launch main_resnet50.py \
 --dataset imagenet \
@@ -403,7 +406,7 @@ python -m torch.distributed.launch main_resnet50.py \
 
 ## Citation
 
-If you find this code is useful to your research, please cite:
+If you find this code is useful for your research, please cite:
 ````
 @inproceedings{
 you2020drawing,
