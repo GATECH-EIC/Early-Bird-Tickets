@@ -140,6 +140,21 @@ python vggprune.py \
 --gpu_ids 0
 ````
 
+* Optional: Pairwise mask distance matrix visualization.
+
+````
+CUDA_VISIBLE_DEVICES=0 python mask_cr.py \
+--dataset cifar100 \
+--start_epoch 1 \
+--end_epoch 160 \
+--depth 16 \
+--arch vgg \
+--percent 0.5 \
+--save ./baseline/vgg16-cifar100 \
+--save_1 ./baseline/vgg16-cifar100
+````
+After calculating mask distance matrix (automatically save as `overlap-0.5.npy`), u can call `plot_overlap.py` to draw figures.
+
 ### Retrain to Restore Accuracy
 Example: Retrain drawn EB tickets (e.g., VGG16 for CIFAR-100) to restore accuracy
 
