@@ -159,7 +159,6 @@ bash ./scripts/low-precision/retrain_continue.sh
 ````
 
 * Comparison example
-
 <div align=left>
     <img src="./assets/vgg-result.png" width = "800" alt="eb-train"  />
 </div>
