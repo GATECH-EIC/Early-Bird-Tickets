@@ -1,0 +1,16 @@
+python -m torch.distributed.launch main_resnet50.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet50_prune \
+--depth 50 \
+--lr 0.1 \
+--epochs 90 \
+--schedule 30 60 \
+--batch-size 256 \
+--test-batch-size 128 \
+--save ./EBTrain-ImageNet/ResNet50/retrain_7008_0.7 \
+--scratch ./EBTrain-ImageNet/ResNet50/pruned_7008_0.7/pruned.pth.tar \
+--momentum 0.9 \
+--gpu_ids 4,5,6,7 \
+--port 14000 \
+--start-epoch 8

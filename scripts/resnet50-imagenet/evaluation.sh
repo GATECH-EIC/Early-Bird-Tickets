@@ -1,0 +1,15 @@
+python -m torch.distributed.launch EVAL_ResNet50_ImageNet.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet50_prune \
+--depth 50 \
+--lr 0.1 \
+--epochs 90 \
+--schedule 30 60 \
+--batch-size 128 \
+--test-batch-size 128 \
+--save ./EBTrain-ImageNet/ResNet50/temp \
+--scratch ./EBTrain-ImageNet/ResNet50/pruned_3010_0.3/pruned.pth.tar \
+--resume ./EBTrain-ImageNet/ResNet50/retrain_3010_0.3/model_best.pth.tar \
+--momentum 0.9 \
+--gpu_ids 0,1,2,3

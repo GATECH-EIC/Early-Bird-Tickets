@@ -1,0 +1,13 @@
+CUDA_VISIBLE_DEVICES=0 python main.py \
+--dataset imagenet \
+--data /data3/imagenet-data/raw-data \
+--arch resnet18 \
+--depth 18 \
+--lr 0.1 \
+--epochs 90 \
+--schedule 30 60 \
+--batch-size 256 \
+--test-batch-size 64 \
+--save ./EBTrain-ImageNet/ResNet18 \
+--momentum 0.9 \
+--sparsity-regularization
