@@ -80,7 +80,7 @@ model = sequential_lower(model, layer_types=["conv", "linear"],
                          forward_number=number_dict["activate"], backward_number=number_dict["error"],
                          forward_rounding=args.rounding, backward_rounding=args.rounding)
 # removing the final quantization module
-model.classifier = model.classifier[0] 
+model.classifier = model.classifier[0]
 
 if args.model:
     if os.path.isfile(args.model):
@@ -97,6 +97,7 @@ if args.model:
               # .format(args.model, checkpoint['epoch'], best_prec1))
     else:
         print("=> no checkpoint found at '{}'".format(args.model))
+        exit()
 
 print('original model param: ', print_model_param_nums(model))
 print('original model flops: ', print_model_param_flops(model, 32, True))
@@ -247,7 +248,7 @@ newmodel = sequential_lower(newmodel, layer_types=["conv", "linear"],
                          forward_number=number_dict["activate"], backward_number=number_dict["error"],
                          forward_rounding=args.rounding, backward_rounding=args.rounding)
 # removing the final quantization module
-newmodel.classifier = newmodel.classifier[0] 
+newmodel.classifier = newmodel.classifier[0]
 
 if len(args.gpu_ids) > 0:
     newmodel = torch.nn.DataParallel(newmodel, device_ids=args.gpu_ids)

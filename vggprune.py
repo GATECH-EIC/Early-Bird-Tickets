@@ -32,7 +32,7 @@ parser.add_argument('--save', default='', type=str, metavar='PATH',
 parser.add_argument('--arch', type=str, default='vgg',
                     help='vgg')
 parser.add_argument('--multi_GPU', type=int, default=0,
-                    help='multi_GPU')          
+                    help='multi_GPU')
 # multi-gpus
 parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
@@ -76,6 +76,7 @@ if args.model:
               # .format(args.model, checkpoint['epoch'], best_prec1))
     else:
         print("=> no checkpoint found at '{}'".format(args.model))
+        exit()
 
 print('original model param: ', print_model_param_nums(model))
 if args.dataset == 'imagenet':
@@ -210,7 +211,7 @@ if args.dataset == "imagenet":
     newmodel = slimmingvgg(dataset=args.dataset, cfg=cfg)
 else:
     newmodel = vgg(dataset=args.dataset, cfg=cfg)
-    
+
 if len(args.gpu_ids) > 1:
     newmodel = torch.nn.DataParallel(newmodel, device_ids=args.gpu_ids)
 if args.cuda:

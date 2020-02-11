@@ -69,6 +69,7 @@ if args.model:
               # .format(args.model, checkpoint['epoch'], best_prec1))
     else:
         print("=> no checkpoint found at '{}'".format(args.resume))
+        exit()
 
 if args.dataset == 'imagenet':
     print('original model param: ', print_model_param_nums(model))

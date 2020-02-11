@@ -37,7 +37,7 @@ parser.add_argument('--test-batch-size', type=int, default=256, metavar='N',
                     help='input batch size for testing (default: 256)')
 parser.add_argument('--epochs', type=int, default=160, metavar='N',
                     help='number of epochs to train (default: 160)')
-parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
+parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('--schedule', type=int, nargs='+', default=[80, 120],
                         help='Decrease learning rate at these epochs.')
@@ -57,7 +57,7 @@ parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--save', default='./logs', type=str, metavar='PATH',
                     help='path to save prune model (default: current directory)')
-parser.add_argument('--arch', default='vgg', type=str, 
+parser.add_argument('--arch', default='vgg', type=str,
                     help='architecture to use')
 parser.add_argument('--scratch',default='', type=str,
                     help='the PATH to the pruned model')
@@ -185,7 +185,7 @@ model = sequential_lower(model, layer_types=["conv", "linear"],
                          forward_rounding=args.rounding, backward_rounding=args.rounding)
 # removing the final quantization module
 if args.arch == 'vgg':
-    model.classifier = model.classifier[0] 
+    model.classifier = model.classifier[0]
 elif args.arch == 'resnet':
     model.fc = model.fc[0]
 
@@ -216,7 +216,7 @@ if args.scratch:
                              forward_rounding=args.rounding, backward_rounding=args.rounding)
         # removing the final quantization module
         if args.arch == 'vgg':
-            model.classifier = model.classifier[0] 
+            model.classifier = model.classifier[0]
         elif args.arch == 'resnet':
             model.fc = model.fc[0]
 
@@ -232,7 +232,7 @@ if args.scratch:
                              forward_rounding=args.rounding, backward_rounding=args.rounding)
         # removing the final quantization module
         if args.arch == 'vgg':
-            model.classifier = model.classifier[0] 
+            model.classifier = model.classifier[0]
         elif args.arch == 'resnet':
             model.fc = model.fc[0]
         model = load_checkpoint(model, args.scratch)

@@ -54,7 +54,7 @@ parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--save', default='./logs', type=str, metavar='PATH',
                     help='path to save prune model (default: current directory)')
-parser.add_argument('--arch', default='vgg', type=str, 
+parser.add_argument('--arch', default='vgg', type=str,
                     help='architecture to use')
 parser.add_argument('--depth', default=19, type=int,
                     help='depth of the neural network')
@@ -209,7 +209,7 @@ model = sequential_lower(model, layer_types=["conv", "linear"],
                          forward_rounding=args.rounding, backward_rounding=args.rounding)
 # removing the final quantization module
 if args.arch == 'vgg':
-    model.classifier = model.classifier[0] 
+    model.classifier = model.classifier[0]
 elif args.arch == 'resnet':
     model.fc = model.fc[0]
 
@@ -235,6 +235,9 @@ def save_checkpoint(state, is_best, epoch, filepath, is_swa):
     elif epoch == 'init':
         filepath = os.path.join(filepath, 'init.pth.tar')
         torch.save(state, filepath)
+    elif 'EB' in str(epoch):
+        filename = os.path.join(filepath, epoch+'.pth.tar')
+        torch.save(state, filename)
     else:
         filename = os.path.join(filepath, 'ckpt'+str(epoch)+'.pth.tar')
         torch.save(state, filename)
@@ -242,8 +245,6 @@ def save_checkpoint(state, is_best, epoch, filepath, is_swa):
         # torch.save(state, filename)
         if is_best:
             shutil.copyfile(filename, os.path.join(filepath, 'model_best.pth.tar'))
-    if 'EB' in str(epoch):
-        filepath = os.path.join(filepath, epoch+'.pth.tar')
 
 if args.resume:
     if os.path.isfile(args.resume):

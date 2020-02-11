@@ -35,7 +35,7 @@ parser.add_argument('--model', default='', type=str, metavar='PATH',
                     help='path to the model (default: none)')
 parser.add_argument('--save', default='', type=str, metavar='PATH',
                     help='path to save pruned model (default: none)')
-parser.add_argument('--arch', default='resnet', type=str, 
+parser.add_argument('--arch', default='resnet', type=str,
                     help='architecture to use')
 # multi-gpus
 parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
@@ -102,6 +102,7 @@ if args.model:
             #   .format(args.model, checkpoint['epoch'], best_prec1))
     else:
         print("=> no checkpoint found at '{}'".format(args.resume))
+        exit()
 
 print('original model param: ', print_model_param_nums(model))
 if args.dataset == "imagenet":
@@ -314,14 +315,14 @@ for layer_id in range(len(old_modules)):
                 idx1 = np.resize(idx1, (1,))
             w1 = m0.weight.data[:, idx0.tolist(), :, :].clone()
 
-            # If the current convolution is not the last convolution in the residual block, then we can change the 
+            # If the current convolution is not the last convolution in the residual block, then we can change the
             # number of output channels. Currently we use `conv_count` to detect whether it is such convolution.
             if conv_count % 3 != 1:
                 w1 = w1[idx1.tolist(), :, :, :].clone()
             m1.weight.data = w1.clone()
             continue
 
-        # We need to consider the case where there are downsampling convolutions. 
+        # We need to consider the case where there are downsampling convolutions.
         # For these convolutions, we just copy the weights.
         m1.weight.data = m0.weight.data.clone()
     elif isinstance(m0, nn.Linear):
