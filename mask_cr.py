@@ -133,19 +133,17 @@ size = best_mask.size(0)
 epochs = args.end_epoch - args.start_epoch + 1
 overlap = np.zeros((epochs, epochs))
 save_dir = os.path.join(args.save, 'overlap_'+str(args.percent))
+masks = []
+
 for i in range(args.start_epoch, args.end_epoch+1):
     resume = args.save + '/ckpt' + str(i-1) + '.pth.tar'
     checkpoint = torch.load(resume)
     model.load_state_dict(checkpoint['state_dict'])
-    mask_i = pruning(model)
+    masks.append(pruning(model))
 
+for i in range(args.start_epoch, args.end_epoch+1):
     for j in range(args.start_epoch, args.end_epoch+1):
-        resume = args.save + '/ckpt' + str(j-1) + '.pth.tar'
-        checkpoint = torch.load(resume)
-        model.load_state_dict(checkpoint['state_dict'])
-        mask_j = pruning(model)
-
-        overlap[i-1, j-1] = float(torch.sum(mask_i==mask_j)) / size
+        overlap[i-1, j-1] = float(torch.sum(masks[i-1] == masks[j-1])) / size
         print('overlap[{}, {}] = {}'.format(i-1, j-1, overlap[i-1, j-1]))
 
     np.save(save_dir, overlap)
