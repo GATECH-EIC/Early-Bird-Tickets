@@ -146,4 +146,4 @@ for i in range(args.start_epoch, args.end_epoch+1):
         overlap[i-1, j-1] = float(torch.sum(masks[i-1] == masks[j-1])) / size
         print('overlap[{}, {}] = {}'.format(i-1, j-1, overlap[i-1, j-1]))
 
-    np.save(save_dir, overlap)
+np.save(save_dir, overlap)
