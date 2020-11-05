@@ -16,6 +16,17 @@ class Bottleneck(nn.Module):
     expansion = 4
 
     def __init__(self, inplanes, planes, cfg, stride=1, downsample=None):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            inplanes: (todo): write your description
+            planes: (todo): write your description
+            cfg: (todo): write your description
+            stride: (int): write your description
+            downsample: (todo): write your description
+        """
         super(Bottleneck, self).__init__()
         self.bn1 = nn.BatchNorm2d(inplanes)
         self.select = channel_selection(inplanes)
@@ -30,6 +41,13 @@ class Bottleneck(nn.Module):
         self.stride = stride
 
     def forward(self, x):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         residual = x
 
         out = self.bn1(x)
@@ -54,6 +72,15 @@ class Bottleneck(nn.Module):
 
 class resnet(nn.Module):
     def __init__(self, depth=164, dataset='cifar10', cfg=None):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            depth: (float): write your description
+            dataset: (todo): write your description
+            cfg: (todo): write your description
+        """
         super(resnet, self).__init__()
         assert (depth - 2) % 9 == 0, 'depth should be 9n+2'
 
@@ -92,6 +119,17 @@ class resnet(nn.Module):
                 m.bias.data.zero_()
 
     def _make_layer(self, block, planes, blocks, cfg, stride=1):
+        """
+        Make a layer.
+
+        Args:
+            self: (todo): write your description
+            block: (todo): write your description
+            planes: (todo): write your description
+            blocks: (todo): write your description
+            cfg: (todo): write your description
+            stride: (int): write your description
+        """
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -108,6 +146,13 @@ class resnet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        """
+        Transforms a layer
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         x = self.conv1(x)
 
         x = self.layer1(x)  # 32x32

@@ -185,6 +185,12 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 def test(model):
+    """
+    Load the model.
+
+    Args:
+        model: (todo): write your description
+    """
     kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
     if args.dataset == 'cifar10':
         test_loader = torch.utils.data.DataLoader(

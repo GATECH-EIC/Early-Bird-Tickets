@@ -10,6 +10,14 @@ Note that for high frequency components, we focus on the edge information, in wh
 """
 
 def Gaussian(src, sigma, ftype):
+    """
+    R calculate a gaussian distribution.
+
+    Args:
+        src: (float): write your description
+        sigma: (float): write your description
+        ftype: (todo): write your description
+    """
     h, w = src.shape
     template = np.zeros(src.shape, dtype=np.float32)
     d0 = 1 / (2 * np.pi * sigma) * h
@@ -38,6 +46,14 @@ def rescale(x, lo, hi):
     return x
 
 def filter(img, sigma, mode='highpass'):
+    """
+    Filter a 2d fourier filter
+
+    Args:
+        img: (array): write your description
+        sigma: (float): write your description
+        mode: (str): write your description
+    """
     # only support single-channel images
     template = Gaussian(img, sigma, mode)
     img_fft = np.fft.fft2(img)
@@ -48,12 +64,26 @@ def filter(img, sigma, mode='highpass'):
     return rescale(img_hp, 0, 1)
 
 def rgb2gray(img):
+    """
+    Convert rgb image to rgb
+
+    Args:
+        img: (array): write your description
+    """
     r, g, b = img[:, :, 0], img[:, :, 1], img[:, :, 2]
     gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
     return gray
 
 # slow version
 def my_gaussian_filter(img, sigma, mode='highpass'):
+    """
+    Gaussian filter
+
+    Args:
+        img: (array): write your description
+        sigma: (float): write your description
+        mode: (todo): write your description
+    """
     img = np.asarray(img)
     # img = img.convert('L')
     gray = rgb2gray(img)
@@ -64,6 +94,14 @@ def my_gaussian_filter(img, sigma, mode='highpass'):
 
 # scipy version (cython accelerator)
 def my_gaussian_filter_2(img, sigma, mode='highpass'):
+    """
+    Filter an image using gaussian
+
+    Args:
+        img: (array): write your description
+        sigma: (float): write your description
+        mode: (todo): write your description
+    """
     img = np.asarray(img.convert('L'))
     img_fft = np.fft.fft2(img)
     G = fourier_gaussian(img_fft, sigma)

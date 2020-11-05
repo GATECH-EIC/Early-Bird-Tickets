@@ -17,6 +17,19 @@ defaultcfg = {
 
 class vgg_lp(nn.Module):
     def __init__(self, bits_A, bits_E, bits_W, dataset='cifar10', depth=19, init_weights=True, cfg=None):
+        """
+        Initialize weights.
+
+        Args:
+            self: (todo): write your description
+            bits_A: (todo): write your description
+            bits_E: (int): write your description
+            bits_W: (int): write your description
+            dataset: (todo): write your description
+            depth: (float): write your description
+            init_weights: (float): write your description
+            cfg: (todo): write your description
+        """
         super(vgg_lp, self).__init__()
         if cfg is None:
             cfg = defaultcfg[depth]
@@ -37,6 +50,14 @@ class vgg_lp(nn.Module):
             self._initialize_weights()
 
     def make_layers(self, cfg, batch_norm=False):
+        """
+        Make layer layers.
+
+        Args:
+            self: (todo): write your description
+            cfg: (todo): write your description
+            batch_norm: (todo): write your description
+        """
         layers = []
         in_channels = 3
         for v in cfg:
@@ -53,6 +74,13 @@ class vgg_lp(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         x = self.feature(x)
         x = nn.AvgPool2d(2)(x)
         x = x.view(x.size(0), -1)
@@ -60,6 +88,12 @@ class vgg_lp(nn.Module):
         return y
 
     def _initialize_weights(self):
+        """
+        Initialize the weights.
+
+        Args:
+            self: (todo): write your description
+        """
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -78,6 +112,12 @@ class vgg_lp(nn.Module):
             self.weight_scale[name] = 1
 
     def _wage_initialize_weights(self):
+        """
+        Initialize the weights.
+
+        Args:
+            self: (todo): write your description
+        """
         self.weight_scale = {}
         for name, param in self.named_parameters():
             if 'weight' in name and len(param.data.shape) > 3:

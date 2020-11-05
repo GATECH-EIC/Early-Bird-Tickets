@@ -17,6 +17,19 @@ class Bottleneck(nn.Module):
     expansion = 4
 
     def __init__(self, bits_A, bits_E, inplanes, planes, cfg, stride=1, downsample=None):
+        """
+        Initialize the batch.
+
+        Args:
+            self: (todo): write your description
+            bits_A: (todo): write your description
+            bits_E: (int): write your description
+            inplanes: (todo): write your description
+            planes: (todo): write your description
+            cfg: (todo): write your description
+            stride: (int): write your description
+            downsample: (todo): write your description
+        """
         super(Bottleneck, self).__init__()
         self.quant = WAGEQuantizer(bits_A, bits_E)
         self.bn1 = nn.BatchNorm2d(inplanes)
@@ -32,6 +45,13 @@ class Bottleneck(nn.Module):
         self.stride = stride
 
     def forward(self, x):
+        """
+        Perform forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         residual = x
 
         out = self.bn1(x)
@@ -59,6 +79,18 @@ class Bottleneck(nn.Module):
 
 class resnet_lp(nn.Module):
     def __init__(self, bits_A, bits_E, bits_W, depth=164, dataset='cifar10', cfg=None):
+        """
+        Initialize layer layers.
+
+        Args:
+            self: (todo): write your description
+            bits_A: (todo): write your description
+            bits_E: (int): write your description
+            bits_W: (int): write your description
+            depth: (float): write your description
+            dataset: (todo): write your description
+            cfg: (todo): write your description
+        """
         super(resnet_lp, self).__init__()
         self.bits_A = bits_A
         self.bits_E = bits_E
@@ -101,6 +133,12 @@ class resnet_lp(nn.Module):
         self._initialize_weights()
 
     def _initialize_weights(self):
+        """
+        Initialize the weights.
+
+        Args:
+            self: (todo): write your description
+        """
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -114,6 +152,12 @@ class resnet_lp(nn.Module):
             self.weight_scale[name] = 1
 
     def _wage_initialize_weights(self):
+        """
+        Initialize the weights.
+
+        Args:
+            self: (todo): write your description
+        """
         self.weight_scale = {}
         for name, param in self.named_parameters():
             if 'weight' in name and not 'bn' in name and not 'downsample' in name:
@@ -129,6 +173,17 @@ class resnet_lp(nn.Module):
                 self.weight_scale[name] = 1
 
     def _make_layer(self, block, planes, blocks, cfg, stride=1):
+        """
+        Make a layer.
+
+        Args:
+            self: (todo): write your description
+            block: (todo): write your description
+            planes: (todo): write your description
+            blocks: (todo): write your description
+            cfg: (todo): write your description
+            stride: (int): write your description
+        """
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -145,6 +200,13 @@ class resnet_lp(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        """
+        Forward computation of the layer
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         x = self.quant(x)
         x = self.conv1(x)
 

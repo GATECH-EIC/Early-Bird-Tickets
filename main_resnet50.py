@@ -211,6 +211,16 @@ if args.dataset == 'imagenet':
 optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
 def save_checkpoint(state, is_best, epoch, filepath, is_swa):
+    """
+    Save checkpoint to checkpoint to file.
+
+    Args:
+        state: (todo): write your description
+        is_best: (bool): write your description
+        epoch: (int): write your description
+        filepath: (str): write your description
+        is_swa: (bool): write your description
+    """
     if is_swa:
         torch.save(state, os.path.join(filepath, 'swa.pth.tar'))
     else:
@@ -249,6 +259,11 @@ history_score = np.zeros((args.epochs, 4))
 
 # additional subgradient descent on the sparsity-induced penalty term
 def updateBN():
+    """
+    Updates the module.
+
+    Args:
+    """
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):
             if m.weight.grad is not None:
@@ -270,6 +285,12 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 def train(epoch):
+    """
+    Training function.
+
+    Args:
+        epoch: (int): write your description
+    """
     model.train()
     global history_score
     avg_loss = 0.
@@ -302,6 +323,12 @@ def train(epoch):
     history_score[epoch][1] = np.round(train_acc / len(train_loader), 2)
 
 def test(model):
+    """
+    Evaluate the model.
+
+    Args:
+        model: (todo): write your description
+    """
     model.eval()
     test_loss = 0
     test_acc = 0
@@ -323,12 +350,28 @@ def test(model):
 
 class EarlyBird():
     def __init__(self, percent, epoch_keep=5):
+        """
+        Initialize the epoch.
+
+        Args:
+            self: (todo): write your description
+            percent: (str): write your description
+            epoch_keep: (bool): write your description
+        """
         self.percent = percent
         self.epoch_keep = epoch_keep
         self.masks = []
         self.dists = [1 for i in range(1, self.epoch_keep)]
 
     def pruning(self, model, percent):
+        """
+        Pruning pruning mask.
+
+        Args:
+            self: (todo): write your description
+            model: (todo): write your description
+            percent: (float): write your description
+        """
         total = 0
         for m in model.modules():
             if isinstance(m, nn.BatchNorm2d):
@@ -362,6 +405,13 @@ class EarlyBird():
         return mask
 
     def put(self, mask):
+        """
+        Put mask to the mask.
+
+        Args:
+            self: (todo): write your description
+            mask: (array): write your description
+        """
         if len(self.masks) < self.epoch_keep:
             self.masks.append(mask)
         else:
@@ -369,6 +419,12 @@ class EarlyBird():
             self.masks.append(mask)
 
     def cal_dist(self):
+        """
+        Calculate the distribution of the distribution.
+
+        Args:
+            self: (todo): write your description
+        """
         if len(self.masks) == self.epoch_keep:
             for i in range(len(self.masks)-1):
                 mask_i = self.masks[-1]
@@ -379,6 +435,13 @@ class EarlyBird():
             return False
 
     def early_bird_emerge(self, model):
+        """
+        Determine whether the model has been satisfied.
+
+        Args:
+            self: (todo): write your description
+            model: (todo): write your description
+        """
         mask = self.pruning(model, self.percent)
         self.put(mask)
         flag = self.cal_dist()

@@ -16,6 +16,16 @@ defaultcfg = {
 
 class vgg(nn.Module):
     def __init__(self, dataset='cifar10', depth=19, init_weights=True, cfg=None):
+        """
+        Initialize the classifier.
+
+        Args:
+            self: (todo): write your description
+            dataset: (todo): write your description
+            depth: (float): write your description
+            init_weights: (float): write your description
+            cfg: (todo): write your description
+        """
         super(vgg, self).__init__()
         if cfg is None:
             cfg = defaultcfg[depth]
@@ -33,6 +43,14 @@ class vgg(nn.Module):
             self._initialize_weights()
 
     def make_layers(self, cfg, batch_norm=False):
+        """
+        Make layer layers.
+
+        Args:
+            self: (todo): write your description
+            cfg: (todo): write your description
+            batch_norm: (todo): write your description
+        """
         layers = []
         in_channels = 3
         for v in cfg:
@@ -48,6 +66,13 @@ class vgg(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         x = self.feature(x)
         x = nn.AvgPool2d(2)(x)
         x = x.view(x.size(0), -1)
@@ -55,6 +80,12 @@ class vgg(nn.Module):
         return y
 
     def _initialize_weights(self):
+        """
+        Initialize the weights.
+
+        Args:
+            self: (todo): write your description
+        """
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels

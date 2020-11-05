@@ -176,6 +176,15 @@ if args.cuda:
 optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
 def save_checkpoint(state, is_best, epoch, filepath):
+    """
+    Save model to filepath.
+
+    Args:
+        state: (todo): write your description
+        is_best: (bool): write your description
+        epoch: (int): write your description
+        filepath: (str): write your description
+    """
     if epoch == 'init':
         filepath = os.path.join(filepath, 'init.pth.tar')
         torch.save(state, filepath)
@@ -212,6 +221,11 @@ history_score = np.zeros((args.epochs, 3))
 
 # additional subgradient descent on the sparsity-induced penalty term
 def updateBN():
+    """
+    Updates the graph with the given weight.
+
+    Args:
+    """
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):
             m.weight.grad.data.add_(args.s*torch.sign(m.weight.data))  # L1
@@ -232,6 +246,12 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 def train(epoch):
+    """
+    Training function.
+
+    Args:
+        epoch: (int): write your description
+    """
     model.train()
     global history_score
     avg_loss = 0.
@@ -258,6 +278,11 @@ def train(epoch):
     history_score[epoch][1] = np.round(train_acc / len(train_loader), 2)
 
 def test():
+    """
+    Evaluate the model.
+
+    Args:
+    """
     model.eval()
     test_loss = 0
     test_acc = 0
