@@ -77,6 +77,12 @@ if args.cuda:
     model.cuda()
 
 def pruning(model):
+    """
+    Generate pruning mask.
+
+    Args:
+        model: (todo): write your description
+    """
     total = 0
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):

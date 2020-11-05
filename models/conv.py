@@ -11,6 +11,14 @@ from .quantize_2 import calculate_qparams, quantize, quantize_grad, Quantize
 class WeightQuantFunc(Function):
     @staticmethod
     def forward(self, weight, num_bits_weight):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            weight: (str): write your description
+            num_bits_weight: (int): write your description
+        """
         with torch.no_grad():
             # q_weight
             if num_bits_weight is not None and num_bits_weight < 32:
@@ -22,14 +30,41 @@ class WeightQuantFunc(Function):
 
     @staticmethod
     def backward(self, grad_output):
+        """
+        Calculate backward.
+
+        Args:
+            self: (todo): write your description
+            grad_output: (bool): write your description
+        """
         with torch.no_grad():
             grad_weight = grad_output
         return grad_weight, None
 
 def quant_weight(weight, num_bits_weight=8):
+    """
+    Return the weight of a sequence.
+
+    Args:
+        weight: (float): write your description
+        num_bits_weight: (int): write your description
+    """
     return WeightQuantFunc.apply(weight, num_bits_weight)
 
 def conv2d_biprec(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, num_bits_grad=None):
+    """
+    Biprecords.
+
+    Args:
+        input: (todo): write your description
+        weight: (todo): write your description
+        bias: (todo): write your description
+        stride: (int): write your description
+        padding: (str): write your description
+        dilation: (list): write your description
+        groups: (array): write your description
+        num_bits_grad: (int): write your description
+    """
     out1 = F.conv2d(input.detach(), weight, bias,
                     stride, padding, dilation, groups)
     out2 = F.conv2d(input, weight.detach(), bias.detach() if bias is not None else None,
@@ -39,6 +74,24 @@ def conv2d_biprec(input, weight, bias=None, stride=1, padding=0, dilation=1, gro
 
 class new_conv(Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=False, num_bits=8, num_bits_weight=8, num_bits_grad=8, input_signed=False):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            in_channels: (int): write your description
+            out_channels: (int): write your description
+            kernel_size: (int): write your description
+            stride: (int): write your description
+            padding: (str): write your description
+            dilation: (todo): write your description
+            groups: (list): write your description
+            bias: (float): write your description
+            num_bits: (int): write your description
+            num_bits_weight: (int): write your description
+            num_bits_grad: (int): write your description
+            input_signed: (todo): write your description
+        """
         kernel_size = _pair(kernel_size)
         stride = _pair(stride)
         padding = _pair(padding)
@@ -55,6 +108,13 @@ class new_conv(Conv2d):
         self.quant_input = Quantize(num_bits=self.num_bits, shape_measure=(1,1,1,1,), flatten_dims=(1, -1), dequantize=True, input_signed=self.input_signed, stochastic=False, momentum=0.1)
 
     def forward(self, input):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            input: (todo): write your description
+        """
         q_input = self.quant_input(input)
         q_weight = quant_weight(self.weight, num_bits_weight=self.num_bits_weight)
         q_bias = None

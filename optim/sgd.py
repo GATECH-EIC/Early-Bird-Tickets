@@ -39,6 +39,19 @@ class SGD(Optimizer):
 
     def __init__(self, params, lr=required, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False):
+        """
+        Initialize the model.
+
+        Args:
+            self: (todo): write your description
+            params: (dict): write your description
+            lr: (float): write your description
+            required: (todo): write your description
+            momentum: (array): write your description
+            dampening: (todo): write your description
+            weight_decay: (float): write your description
+            nesterov: (todo): write your description
+        """
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if momentum < 0.0:
@@ -53,6 +66,13 @@ class SGD(Optimizer):
         super(SGD, self).__init__(params, defaults)
 
     def __setstate__(self, state):
+        """
+        Sets the state of this group.
+
+        Args:
+            self: (todo): write your description
+            state: (dict): write your description
+        """
         super(SGD, self).__setstate__(state)
         for group in self.param_groups:
             group.setdefault('nesterov', False)

@@ -22,6 +22,19 @@ class RMSprop(Optimizer):
     """
 
     def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-8, weight_decay=0, momentum=0, centered=False):
+        """
+        Initialize the learning rate.
+
+        Args:
+            self: (todo): write your description
+            params: (dict): write your description
+            lr: (float): write your description
+            alpha: (float): write your description
+            eps: (float): write your description
+            weight_decay: (float): write your description
+            momentum: (array): write your description
+            centered: (bool): write your description
+        """
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -37,6 +50,13 @@ class RMSprop(Optimizer):
         super(RMSprop, self).__init__(params, defaults)
 
     def __setstate__(self, state):
+        """
+        Sets the state of this group.
+
+        Args:
+            self: (todo): write your description
+            state: (dict): write your description
+        """
         super(RMSprop, self).__setstate__(state)
         for group in self.param_groups:
             group.setdefault('momentum', 0)

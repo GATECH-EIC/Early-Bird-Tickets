@@ -193,6 +193,13 @@ if args.dataset == 'imagenet':
     model = torch.nn.DataParallel(model, device_ids=args.gpu_ids)
 
 def load_checkpoint(model, checkpoint_path):
+    """
+    Load a checkpoint checkpoint model from disk. file.
+
+    Args:
+        model: (todo): write your description
+        checkpoint_path: (str): write your description
+    """
    model_ckpt = torch.load(checkpoint_path, map_location='cpu')
    pretrained_dict = model_ckpt['state_dict']
    model_dict = model.state_dict()
@@ -273,6 +280,11 @@ history_score = np.zeros((args.epochs, 4))
 
 # additional subgradient descent on the sparsity-induced penalty term
 def updateBN():
+    """
+    Updates the graph with the given weight.
+
+    Args:
+    """
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):
             m.weight.grad.data.add_(args.s*torch.sign(m.weight.data))  # L1
@@ -293,6 +305,12 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 def train(epoch):
+    """
+    Training function.
+
+    Args:
+        epoch: (int): write your description
+    """
     model.train()
     global history_score
     avg_loss = 0.
@@ -319,6 +337,12 @@ def train(epoch):
     history_score[epoch][1] = np.round(train_acc / len(train_loader), 2)
 
 def test(model):
+    """
+    Evaluate the model.
+
+    Args:
+        model: (todo): write your description
+    """
     model.eval()
     test_loss = 0
     test_acc = 0
@@ -339,6 +363,15 @@ def test(model):
     return np.round(test_acc / len(test_loader), 2)
 
 def save_checkpoint(state, is_best, filepath, is_swa):
+    """
+    Save checkpoint to filepath.
+
+    Args:
+        state: (todo): write your description
+        is_best: (bool): write your description
+        filepath: (str): write your description
+        is_swa: (bool): write your description
+    """
     if is_swa:
         torch.save(state, os.path.join(filepath, 'swa.pth.tar'))
     else:
@@ -347,29 +380,70 @@ def save_checkpoint(state, is_best, filepath, is_swa):
             shutil.copyfile(os.path.join(filepath, 'checkpoint.pth.tar'), os.path.join(filepath, 'model_best.pth.tar'))
 
 def moving_average(net1, net2, alpha=1):
+    """
+    Moving average.
+
+    Args:
+        net1: (todo): write your description
+        net2: (todo): write your description
+        alpha: (float): write your description
+    """
     for param1, param2 in zip(net1.parameters(), net2.parameters()):
         param1.data *= (1.0 - alpha)
         param1.data += param2.data * alpha
 
 def _check_bn(module, flag):
+    """
+    Check if a module is a batch.
+
+    Args:
+        module: (todo): write your description
+        flag: (todo): write your description
+    """
     if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
         flag[0] = True
 
 def check_bn(model):
+    """
+    Determine the given module is a module.
+
+    Args:
+        model: (todo): write your description
+    """
     flag = [False]
     model.apply(lambda module: _check_bn(module, flag))
     return flag[0]
 
 def reset_bn(module):
+    """
+    Reset the state of a module.
+
+    Args:
+        module: (todo): write your description
+    """
     if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
         module.running_mean = torch.zeros_like(module.running_mean)
         module.running_var = torch.ones_like(module.running_var)
 
 def _get_momenta(module, momenta):
+    """
+    Returns the moment.
+
+    Args:
+        module: (str): write your description
+        momenta: (str): write your description
+    """
     if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
         momenta[module] = module.momentum
 
 def _set_momenta(module, momenta):
+    """
+    Sets the moments.
+
+    Args:
+        module: (str): write your description
+        momenta: (todo): write your description
+    """
     if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
         module.momentum = momenta[module]
 

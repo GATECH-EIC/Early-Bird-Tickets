@@ -16,6 +16,17 @@ densenet with basic block.
 
 class BasicBlock(nn.Module):
     def __init__(self, inplanes, cfg, expansion=1, growthRate=12, dropRate=0):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            inplanes: (todo): write your description
+            cfg: (todo): write your description
+            expansion: (todo): write your description
+            growthRate: (todo): write your description
+            dropRate: (todo): write your description
+        """
         super(BasicBlock, self).__init__()
         planes = expansion * growthRate
         self.bn1 = nn.BatchNorm2d(inplanes)
@@ -26,6 +37,13 @@ class BasicBlock(nn.Module):
         self.dropRate = dropRate
 
     def forward(self, x):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         out = self.bn1(x)
         out = self.select(out)
         out = self.relu(out)
@@ -39,6 +57,15 @@ class BasicBlock(nn.Module):
 
 class Transition(nn.Module):
     def __init__(self, inplanes, outplanes, cfg):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            inplanes: (todo): write your description
+            outplanes: (int): write your description
+            cfg: (todo): write your description
+        """
         super(Transition, self).__init__()
         self.bn1 = nn.BatchNorm2d(inplanes)
         self.select = channel_selection(inplanes)
@@ -47,6 +74,13 @@ class Transition(nn.Module):
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
+        """
+        Evaluate forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         out = self.bn1(x)
         out = self.select(out)
         out = self.relu(out)
@@ -58,6 +92,18 @@ class densenet(nn.Module):
 
     def __init__(self, depth=40, 
         dropRate=0, dataset='cifar10', growthRate=12, compressionRate=1, cfg = None):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            depth: (float): write your description
+            dropRate: (todo): write your description
+            dataset: (todo): write your description
+            growthRate: (todo): write your description
+            compressionRate: (str): write your description
+            cfg: (todo): write your description
+        """
         super(densenet, self).__init__()
 
         assert (depth - 4) % 3 == 0, 'depth should be 3n+4'
@@ -107,6 +153,15 @@ class densenet(nn.Module):
                 m.bias.data.zero_()
 
     def _make_denseblock(self, block, blocks, cfg):
+        """
+        Make a dense block.
+
+        Args:
+            self: (todo): write your description
+            block: (todo): write your description
+            blocks: (todo): write your description
+            cfg: (todo): write your description
+        """
         layers = []
         assert blocks == len(cfg), 'Length of the cfg parameter is not right.'
         for i in range(blocks):
@@ -117,6 +172,14 @@ class densenet(nn.Module):
         return nn.Sequential(*layers)
 
     def _make_transition(self, compressionRate, cfg):
+        """
+        Make transition matrix.
+
+        Args:
+            self: (todo): write your description
+            compressionRate: (todo): write your description
+            cfg: (todo): write your description
+        """
         # cfg is a number in this case.
         inplanes = self.inplanes
         outplanes = int(math.floor(self.inplanes // compressionRate))
@@ -124,6 +187,13 @@ class densenet(nn.Module):
         return Transition(inplanes, outplanes, cfg)
 
     def forward(self, x):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         x = self.conv1(x)
 
         x = self.trans1(self.dense1(x))

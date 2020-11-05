@@ -18,6 +18,18 @@ class Bottleneck(nn.Module):
     expansion = 4
 
     def __init__(self, inplanes, planes, cfg, stride=1, downsample=None, cfg_bef=None):
+        """
+        Initialize batch.
+
+        Args:
+            self: (todo): write your description
+            inplanes: (todo): write your description
+            planes: (todo): write your description
+            cfg: (todo): write your description
+            stride: (int): write your description
+            downsample: (todo): write your description
+            cfg_bef: (todo): write your description
+        """
         super(Bottleneck, self).__init__()
         self.cfg_bef = cfg_bef
         self.cfg = cfg
@@ -44,6 +56,13 @@ class Bottleneck(nn.Module):
         self.stride = stride
 
     def forward(self, x):
+        """
+        Perform forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         residual = x
 
         out = self.conv1(x)
@@ -66,6 +85,12 @@ class Bottleneck(nn.Module):
         return out
 
     def get_output_c(self):
+        """
+        Get the output of the cfg
+
+        Args:
+            self: (todo): write your description
+        """
         if self.downsample != None:
             return self.cfg[3]
         elif self.cfg_bef != None:
@@ -77,6 +102,16 @@ class Bottleneck(nn.Module):
 class ResNet(nn.Module):
 
     def __init__(self, block, layers, cfg, num_classes=1000):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            block: (todo): write your description
+            layers: (list): write your description
+            cfg: (todo): write your description
+            num_classes: (int): write your description
+        """
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv2d(3, cfg[0], kernel_size=7, stride=2, padding=3,
@@ -103,6 +138,18 @@ class ResNet(nn.Module):
                 m.bias.data.zero_()
 
     def _make_layer(self, block, cfg_bef, cfg, planes, blocks, stride=1):
+        """
+        Make a layer.
+
+        Args:
+            self: (todo): write your description
+            block: (todo): write your description
+            cfg_bef: (todo): write your description
+            cfg: (todo): write your description
+            planes: (todo): write your description
+            blocks: (todo): write your description
+            stride: (int): write your description
+        """
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -126,6 +173,13 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers), cfg_bef
 
     def forward(self, x):
+        """
+        Perform forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)

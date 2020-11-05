@@ -15,6 +15,16 @@ model_urls = {
 class VGG(nn.Module):
 
     def __init__(self, features, cfg, num_classes=1000, init_weights=True):
+        """
+        Initialize the network.
+
+        Args:
+            self: (todo): write your description
+            features: (todo): write your description
+            cfg: (todo): write your description
+            num_classes: (int): write your description
+            init_weights: (float): write your description
+        """
         super(VGG, self).__init__()
         self.features = features
         self.classifier = nn.Sequential(
@@ -30,12 +40,25 @@ class VGG(nn.Module):
             self._initialize_weights()
 
     def forward(self, x):
+        """
+        Forward computation.
+
+        Args:
+            self: (todo): write your description
+            x: (todo): write your description
+        """
         x = self.features(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
         return x
 
     def _initialize_weights(self):
+        """
+        Initialize the weights.
+
+        Args:
+            self: (todo): write your description
+        """
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal(m.weight, mode='fan_out')#, nonlinearity='relu')
@@ -52,6 +75,13 @@ class VGG(nn.Module):
                 m.bias.data.zero_()
 
 def make_layers(cfg, batch_norm=False):
+    """
+    Make layers for layers.
+
+    Args:
+        cfg: (todo): write your description
+        batch_norm: (todo): write your description
+    """
     layers = []
     in_channels = 3
     for v in cfg:
